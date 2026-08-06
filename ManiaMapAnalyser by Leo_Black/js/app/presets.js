@@ -473,7 +473,10 @@ export function applyPresetByName(name) {
     applySnapshot(snapshot);
     currentPreset = name;
     persistActivePreset();
-    writeBackToTosu(name, snapshot);
+    if (shouldWriteBack(snapshot, name)) {
+        writeBackToTosu(name, snapshot);
+        markWritten(snapshot, name);
+    }
     // Mirror the write-back into lastValues so the echo broadcast of the same
     // values is not mistaken for a manual settings change (no auto-save loop).
     // Spread the previous lastValues first so keys absent from built-in
@@ -497,7 +500,12 @@ export function getActivePreset() {
  * Both paths sync the snapshot (plus the preset picker value) back to tosu.
  */
 export function autoSaveCurrentPreset() {
-    const snapshot = captureCurrentSettings();
+    // The broadcast payload (lastValues) is the ONLY source: every page of
+    // this origin receives the same values, so snapshots built from it are
+    // identical across pages. Merging the live state here would let each page
+    // fill payload gaps with its own (possibly preset-tainted) state values,
+    // producing divergent write-backs and an endless write-back loop.
+    const snapshot = { ...lastValues };
 
     const anchored = customPresets.find((preset) => preset.name === currentPreset);
     if (anchored) {
@@ -505,7 +513,10 @@ export function autoSaveCurrentPreset() {
         anchored.updatedAt = Date.now();
         persistCustomPresets();
         renderPresetManager();
-        writeBackToTosu(anchored.name, snapshot);
+        if (shouldWriteBack(snapshot, anchored.name)) {
+            writeBackToTosu(anchored.name, snapshot);
+            markWritten(snapshot, anchored.name);
+        }
         lastValues = { ...lastValues, ...snapshot, preset: anchored.name };
         return;
     }
@@ -526,7 +537,10 @@ export function autoSaveCurrentPreset() {
     currentPreset = AUTO_SAVE_PRESET_NAME;
     persistActivePreset();
     renderPresetManager();
-    writeBackToTosu(AUTO_SAVE_PRESET_NAME, snapshot);
+    if (shouldWriteBack(snapshot, AUTO_SAVE_PRESET_NAME)) {
+        writeBackToTosu(AUTO_SAVE_PRESET_NAME, snapshot);
+        markWritten(snapshot, AUTO_SAVE_PRESET_NAME);
+    }
     lastValues = { ...lastValues, ...snapshot, preset: AUTO_SAVE_PRESET_NAME };
 }
 
@@ -669,6 +683,84 @@ function hasKeyChanged(prev, next, key) {
  *  - any other settings change: auto-save into the anchored custom preset or
  *    the Auto container (write-back echoes the same values -> no loop).
  */
+/** Applies every payload key present in the settings schema to the live state. */
+function applyPayloadToState() {
+    for (const [key, applyFn] of Object.entries(PRESET_APPLIERS)) {
+        if (Object.prototype.hasOwnProperty.call(lastValues, key) && lastValues[key] !== undefined) {
+            try {
+                applyFn(lastValues[key]);
+            } catch {
+                // Ignore per-key apply failures; the settings.js listener
+                // will still apply valid keys from the same broadcast.
+            }
+        }
+    }
+}
+
+/**
+ * Write-back dedup shared across ALL pages of this origin via localStorage.
+ * The shared record is re-read on EVERY check (no in-memory cache — a stale
+ * cache let pages miss each other's latest write and feed echo loops), plus a
+ * short per-preset throttle that collapses bursts of identical write-backs
+ * from many open pages (browser overlay, ingame overlays, OBS sources).
+ */
+const LAST_WRITTEN_KEY = "mma.presets.lastWritten.v1";
+const WRITE_BACK_THROTTLE_MS = 1500;
+
+function readLastWritten() {
+    try {
+        const raw = window.localStorage.getItem(LAST_WRITTEN_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+}
+
+function shouldWriteBack(snapshot, presetName) {
+    const last = readLastWritten();
+    if (!last) {
+        return true;
+    }
+    // Throttle: if this preset was written very recently (by any page), skip.
+    if (last.presetName === presetName && Date.now() - last.t < WRITE_BACK_THROTTLE_MS) {
+        return false;
+    }
+    if (last.presetName !== presetName) {
+        return true;
+    }
+    for (const key of Object.keys(PRESET_APPLIERS)) {
+        if (snapshot[key] !== last.snapshot[key]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function markWritten(snapshot, presetName) {
+    const record = { presetName, snapshot: { ...snapshot }, t: Date.now() };
+    try {
+        window.localStorage.setItem(LAST_WRITTEN_KEY, JSON.stringify(record));
+    } catch {
+        // Storage failure only costs cross-page dedup; keep going.
+    }
+}
+
+/** Updates (or creates) the fixed "Auto" container with a snapshot. */
+function syncAutoPreset(snapshot) {
+    const auto = customPresets.find((preset) => preset.name === AUTO_SAVE_PRESET_NAME);
+    if (auto) {
+        auto.settings = snapshot;
+        auto.updatedAt = Date.now();
+    } else {
+        customPresets.push({
+            id: `auto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+            name: AUTO_SAVE_PRESET_NAME,
+            settings: snapshot,
+            createdAt: Date.now(),
+        });
+    }
+}
+
 function handleSettingsPacket(packet) {
     const payload = extractSettingsPayload(packet);
     if (!payload) {
@@ -694,29 +786,85 @@ function handleSettingsPacket(packet) {
     const prev = lastValues;
     lastValues = snapshotOf(payload);
 
+    // True when the user actually changed settings in the dashboard (the
+    // broadcast differs from the page's last known snapshot). Used to decide
+    // between "use this preset" (no change) and "overwrite with my changes".
+    const hasManualChange = Object.keys(PRESET_APPLIERS)
+        .some((key) => hasKeyChanged(prev, lastValues, key));
+
     if (presetValue && presetValue !== currentPreset) {
+        // The preset picker moved to a different preset.
         if (presetValue === AUTO_SAVE_PRESET_NAME) {
-            currentPreset = AUTO_SAVE_PRESET_NAME;
-            persistActivePreset();
-            renderPresetManager();
+            if (hasManualChange) {
+                // User edited settings then picked Auto: overwrite Auto.
+                applyPayloadToState();
+                autoSaveCurrentPreset();
+            } else {
+                // Just switched the picker to Auto: follow mode, no overwrite.
+                currentPreset = AUTO_SAVE_PRESET_NAME;
+                persistActivePreset();
+                renderPresetManager();
+            }
             return;
         }
-        if (!applyPresetByName(presetValue)) {
-            currentPreset = "Default";
-            persistActivePreset();
-            renderPresetManager();
+
+        const isCustom = customPresets.some((preset) => preset.name === presetValue);
+        if (isCustom) {
+            if (hasManualChange) {
+                // User edited settings with a custom preset selected:
+                // overwrite that preset AND keep Auto in sync; the picker
+                // stays on the custom preset (it is the editing target).
+                // Snapshot comes from the broadcast payload ONLY (single
+                // source of truth) so all open pages write identical content.
+                applyPayloadToState();
+                const snapshot = { ...lastValues };
+                const target = customPresets.find((preset) => preset.name === presetValue);
+                if (target) {
+                    target.settings = snapshot;
+                    target.updatedAt = Date.now();
+                }
+                syncAutoPreset(snapshot);
+                persistCustomPresets();
+                currentPreset = presetValue;
+                persistActivePreset();
+                renderPresetManager();
+                if (shouldWriteBack(snapshot, presetValue)) {
+                    writeBackToTosu(presetValue, snapshot);
+                    markWritten(snapshot, presetValue);
+                }
+                lastValues = { ...lastValues, ...snapshot, preset: presetValue };
+            } else {
+                // No edits: "use" the custom preset (apply its saved content).
+                if (!applyPresetByName(presetValue)) {
+                    currentPreset = "Default";
+                    persistActivePreset();
+                    renderPresetManager();
+                }
+            }
+            return;
+        }
+
+        // Built-in (read-only) preset, including "Default".
+        if (hasManualChange) {
+            // User edited settings with a built-in preset selected: the edits
+            // become the new Auto preset and the picker moves to Auto.
+            applyPayloadToState();
+            autoSaveCurrentPreset();
+        } else {
+            // No edits: "use" the built-in preset (apply its content).
+            if (!applyPresetByName(presetValue)) {
+                currentPreset = "Default";
+                persistActivePreset();
+                renderPresetManager();
+            }
         }
         return;
     }
 
-    let anyChange = false;
-    for (const key of Object.keys(PRESET_APPLIERS)) {
-        if (hasKeyChanged(prev, lastValues, key)) {
-            anyChange = true;
-            break;
-        }
-    }
-    if (anyChange) {
+    // The picker stayed on the same preset: any change is an edit of whatever
+    // is selected (Auto, a custom preset or a built-in one) -> auto-save.
+    if (hasManualChange) {
+        applyPayloadToState();
         autoSaveCurrentPreset();
     }
 }
