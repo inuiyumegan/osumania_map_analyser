@@ -43,7 +43,6 @@ import {
     parseEnableLNDifficultyValue,
     parseEnableAnalyzeLNValue,
     parseEnableAlwaysShowLNDifficultyValue,
-    parsePresetValue,
     patternClustersEl,
     reworkStarEl,
     socket,
@@ -63,7 +62,6 @@ import {
     normalizeWsEndpointValue,
     normalizeSrTextValue,
 } from "../parser/settingsParser.js";
-import { ensureAndApplyPresetByName, autoSaveCurrentPreset, AUTO_SAVE_PRESET_NAME } from "./presets.js";
 import {
     clearDiffGraph,
     redrawPauseMarkers,
@@ -515,29 +513,6 @@ export function applyDiffTextSetting(value) {
     return changed;
 }
 
-export function applyPresetSetting(value) {
-    const candidate = value || "Custom";
-    if (state.preset === candidate) {
-        return false;
-    }
-
-    // "Auto" is a system marker, not an applicable snapshot: it only means
-    // "keep following my manual changes" (the Auto container is managed by
-    // autoSaveCurrentPreset). Never apply or write back anything for it here.
-    if (candidate === AUTO_SAVE_PRESET_NAME) {
-        state.preset = candidate;
-        return true;
-    }
-
-    // Unknown names (e.g. the default "Custom N" slots picked in the
-    // dashboard dropdown) are lazily materialized as real custom presets and
-    // then applied; "Custom" or anything else unresolvable falls back to no
-    // preset.
-    const applied = ensureAndApplyPresetByName(candidate);
-    state.preset = applied ? candidate : "Custom";
-    return true;
-}
-
 export function applyEstimatorAlgorithmSetting(value) {
     const next = normalizeEstimatorAlgorithmValue(value) || APP_CONFIG.defaults.estimatorAlgorithm;
     const changed = state.estimatorAlgorithm !== next;
@@ -754,7 +729,6 @@ export function setupSettingsCommandListener() {
         const applyIf = (key, applyFn, parseResult) =>
             hasKey(key) ? applyFn(parseResult) : false;
 
-        const wasFirstCommandBatch = !state.settingsReceivedFromCommand;
         state.settingsReceivedFromCommand = true;
         const wsEndpointChanged = applyIf("wsEndpoint", applyWsEndpointSetting, parseWsEndpointValue(payload));
         const contentBarChanged = applyIf("contentBar", applyContentBarSetting, parseContentBarValue(payload));
@@ -799,11 +773,7 @@ export function setupSettingsCommandListener() {
             refreshAutoDisplayProfile();
         }
 
-        // Preset is applied last so the snapshot wins over the raw payload.
-        const presetChanged = applyIf("preset", applyPresetSetting, parsePresetValue(payload));
-
         const changed = contentBarChanged
-            || presetChanged
             || wsEndpointChanged
             || srTextChanged
             || debugChanged
@@ -890,14 +860,6 @@ export function setupSettingsCommandListener() {
         } else if (changed) {
             // Caption-only changes (like numeric display toggle) are applied immediately.
         }
-
-        // Auto-save the current configuration into the active custom preset
-        // (or the fixed "Auto" preset) whenever the dashboard pushed a real
-        // settings change. Skipped for the initial settings batch and when
-        // the only change was the preset picker itself.
-        if (changed && !presetChanged && !wasFirstCommandBatch) {
-            autoSaveCurrentPreset();
-        }
     });
 
     if (!state.settingsRequested) {
@@ -978,8 +940,6 @@ export async function loadSettings() {
         applyEnableAlwaysShowLNDifficultySetting(parseEnableAlwaysShowLNDifficultyValue(source));
         applyDisplay6kLevelSetting(parseDisplay6kLevelValue(source));
         applyExtendedEstimationRangeSetting(parseExtendedEstimationRangeValue(source));
-        // Preset applied last so its snapshot wins over every key above.
-        applyPresetSetting(parsePresetValue(source));
     }
 
     // Apply file settings as baseline immediately
@@ -989,7 +949,6 @@ export async function loadSettings() {
         // File unavailable — apply config defaults as fallback
         applySettingsFrom({
             wsEndpoint: APP_CONFIG.defaults.wsEndpoint || APP_CONFIG.socketHost,
-            preset: APP_CONFIG.defaults.preset,
             contentBar: APP_CONFIG.defaults.contentBar,
             srText: APP_CONFIG.defaults.srText,
             debugUseAmount: APP_CONFIG.defaults.debugUseAmount,

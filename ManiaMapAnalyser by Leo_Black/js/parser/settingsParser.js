@@ -571,14 +571,6 @@ export function createSettingsParsers(appConfig) {
         return normalizeBooleanSetting(value, appConfig.defaults.enableAlwaysShowLNDifficulty);
     }
 
-    function parsePresetValue(settingsPayload) {
-        const value = extractSettingValue(settingsPayload, "preset");
-        if (typeof value !== "string" || !value.trim()) {
-            return null;
-        }
-        return value.trim();
-    }
-
     return {
         parseEnablePatternValue,
         parseContentBarValue,
@@ -619,6 +611,5 @@ export function createSettingsParsers(appConfig) {
         parseEnableLNDifficultyValue,
         parseEnableAnalyzeLNValue,
         parseEnableAlwaysShowLNDifficultyValue,
-        parsePresetValue,
     };
 }

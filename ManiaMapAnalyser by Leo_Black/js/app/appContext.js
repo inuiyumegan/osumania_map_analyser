@@ -20,53 +20,46 @@ export function getEndpoint() {
 export const STAR_BG_STOPS = APP_CONFIG.starStops.background;
 export const STAR_TEXT_STOPS = APP_CONFIG.starStops.text;
 
-// appContext is imported by estimator/rework modules that also run inside the
-// compute Worker, where `document` does not exist. Guard every top-level DOM
-// lookup so importing this module can never crash a worker.
-const hasDocument = typeof document !== "undefined";
-const queryId = (id) => (hasDocument ? document.getElementById(id) : null);
-const querySel = (selector) => (hasDocument ? document.querySelector(selector) : null);
-
-export const statusEl = queryId("status");
-export const reworkStarEl = queryId("rework-star");
-export const reworkDiffEl = queryId("rework-diff");
-export const reworkRightCapsuleEl = queryId("rework-right-capsule");
-export const reworkMetaEl = queryId("rework-meta");
-export const reworkBlockEl = queryId("rework");
-export const diffGraphWrapEl = queryId("rework-diff-graph-wrap");
-export const diffGraphSvgEl = queryId("rework-diff-graph");
-export const diffGraphFillEl = queryId("rework-diff-graph-fill");
-export const diffGraphFillPlayEl = queryId("rework-diff-graph-fill-play");
-export const diffGraphPlayClipRectEl = queryId("rework-diff-graph-play-clip-rect");
-export const diffGraphLineEl = queryId("rework-diff-graph-line");
-export const diffGraphCursorEl = queryId("rework-diff-graph-cursor");
-export const diffGraphCursorDotEl = queryId("rework-diff-graph-cursor-dot");
-export const diffGraphPauseMarkersEl = queryId("rework-diff-graph-pause-markers");
-export const diffGraphErrorEl = queryId("rework-diff-graph-error");
-export const bodyGraphWrapEl = queryId("body-graph-wrap");
-export const bodyGraphSvgEl = queryId("body-graph");
-export const bodyGraphFillEl = queryId("body-graph-fill");
-export const bodyGraphFillPlayEl = queryId("body-graph-fill-play");
-export const bodyGraphPlayClipRectEl = queryId("body-graph-play-clip-rect");
-export const bodyGraphLineEl = queryId("body-graph-line");
-export const bodyGraphCursorEl = queryId("body-graph-cursor");
-export const bodyGraphCursorDotEl = queryId("body-graph-cursor-dot");
-export const bodyGraphPauseMarkersEl = queryId("body-graph-pause-markers");
-export const bodyGraphErrorEl = queryId("body-graph-error");
-export const estDiffCaptionEl = queryId("est-diff-caption");
-export const patternClustersEl = queryId("pattern-clusters");
-export const ettSkillBarsEl = queryId("ett-skill-bars");
-export const pauseCountEl = queryId("pause-count");
-export const overlayEl = queryId("card-overlay");
-export const overlaySpinnerEl = queryId("overlay-spinner");
-export const overlayTitleEl = queryId("overlay-title");
-export const overlayMessageEl = queryId("overlay-message");
-export const mainCardEl = querySel(".main-card");
-export const dashboardEl = querySel(".dashboard");
-export const titleIconEl = querySel(".title-icon");
-export const modeTagSubGroupEl = queryId("mode-tag-subgroup");
-export const svTagEl = queryId("sv-tag");
-export const starTipEl = queryId("star-tip");
+export const statusEl = document.getElementById("status");
+export const reworkStarEl = document.getElementById("rework-star");
+export const reworkDiffEl = document.getElementById("rework-diff");
+export const reworkRightCapsuleEl = document.getElementById("rework-right-capsule");
+export const reworkMetaEl = document.getElementById("rework-meta");
+export const reworkBlockEl = document.getElementById("rework");
+export const diffGraphWrapEl = document.getElementById("rework-diff-graph-wrap");
+export const diffGraphSvgEl = document.getElementById("rework-diff-graph");
+export const diffGraphFillEl = document.getElementById("rework-diff-graph-fill");
+export const diffGraphFillPlayEl = document.getElementById("rework-diff-graph-fill-play");
+export const diffGraphPlayClipRectEl = document.getElementById("rework-diff-graph-play-clip-rect");
+export const diffGraphLineEl = document.getElementById("rework-diff-graph-line");
+export const diffGraphCursorEl = document.getElementById("rework-diff-graph-cursor");
+export const diffGraphCursorDotEl = document.getElementById("rework-diff-graph-cursor-dot");
+export const diffGraphPauseMarkersEl = document.getElementById("rework-diff-graph-pause-markers");
+export const diffGraphErrorEl = document.getElementById("rework-diff-graph-error");
+export const bodyGraphWrapEl = document.getElementById("body-graph-wrap");
+export const bodyGraphSvgEl = document.getElementById("body-graph");
+export const bodyGraphFillEl = document.getElementById("body-graph-fill");
+export const bodyGraphFillPlayEl = document.getElementById("body-graph-fill-play");
+export const bodyGraphPlayClipRectEl = document.getElementById("body-graph-play-clip-rect");
+export const bodyGraphLineEl = document.getElementById("body-graph-line");
+export const bodyGraphCursorEl = document.getElementById("body-graph-cursor");
+export const bodyGraphCursorDotEl = document.getElementById("body-graph-cursor-dot");
+export const bodyGraphPauseMarkersEl = document.getElementById("body-graph-pause-markers");
+export const bodyGraphErrorEl = document.getElementById("body-graph-error");
+export const estDiffCaptionEl = document.getElementById("est-diff-caption");
+export const patternClustersEl = document.getElementById("pattern-clusters");
+export const ettSkillBarsEl = document.getElementById("ett-skill-bars");
+export const pauseCountEl = document.getElementById("pause-count");
+export const overlayEl = document.getElementById("card-overlay");
+export const overlaySpinnerEl = document.getElementById("overlay-spinner");
+export const overlayTitleEl = document.getElementById("overlay-title");
+export const overlayMessageEl = document.getElementById("overlay-message");
+export const mainCardEl = document.querySelector(".main-card");
+export const dashboardEl = document.querySelector(".dashboard");
+export const titleIconEl = document.querySelector(".title-icon");
+export const modeTagSubGroupEl = document.getElementById("mode-tag-subgroup");
+export const svTagEl = document.getElementById("sv-tag");
+export const starTipEl = document.getElementById("star-tip");
 
 export const state = {
     lastBeatmapKey: "",
@@ -82,7 +75,6 @@ export const state = {
     modSignature: "",
     contentBar: APP_CONFIG.defaults.contentBar,
     effectiveContentBar: null,
-    preset: APP_CONFIG.defaults.preset,
     srText: APP_CONFIG.defaults.srText,
     userContentBar: APP_CONFIG.defaults.contentBar,
     userSrText: APP_CONFIG.defaults.srText,
@@ -231,7 +223,6 @@ export const {
     parseEnableLNDifficultyValue,
     parseEnableAnalyzeLNValue,
     parseEnableAlwaysShowLNDifficultyValue,
-    parsePresetValue,
 } = createSettingsParsers(APP_CONFIG);
 
 export function getActiveContentBar() {
