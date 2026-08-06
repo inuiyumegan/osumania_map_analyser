@@ -921,18 +921,7 @@ export function autoSaveCurrentPreset() {
  */
 function saveToLastSavedPreset() {
     const snapshot = { ...lastValues };
-    const auto = customPresets.find((preset) => preset.name === AUTO_SAVE_PRESET_NAME);
-    if (auto) {
-        auto.settings = snapshot;
-        auto.updatedAt = Date.now();
-    } else {
-        customPresets.push({
-            id: `auto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-            name: AUTO_SAVE_PRESET_NAME,
-            settings: snapshot,
-            createdAt: Date.now(),
-        });
-    }
+    updateAutoContainer(snapshot);
     persistCustomPresets();
     currentPreset = AUTO_SAVE_PRESET_NAME;
     persistActivePreset();
@@ -942,6 +931,27 @@ function saveToLastSavedPreset() {
         markWritten(snapshot, AUTO_SAVE_PRESET_NAME);
     }
     lastValues = { ...lastValues, ...snapshot, preset: AUTO_SAVE_PRESET_NAME };
+}
+
+/**
+ * Creates or updates the fixed "Last Saved Preset" container in memory.
+ * Callers decide when to persist and write back.
+ */
+function updateAutoContainer(snapshot) {
+    const auto = customPresets.find((preset) => preset.name === AUTO_SAVE_PRESET_NAME);
+    if (auto) {
+        auto.settings = snapshot;
+        auto.updatedAt = Date.now();
+        return auto;
+    }
+    const created = {
+        id: `auto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        name: AUTO_SAVE_PRESET_NAME,
+        settings: snapshot,
+        createdAt: Date.now(),
+    };
+    customPresets.push(created);
+    return created;
 }
 
 // ---------------------------------------------------------------------------
@@ -1169,18 +1179,33 @@ function markWritten(snapshot, presetName) {
 
 /** Updates (or creates) the fixed "Auto" container with a snapshot. */
 function syncAutoPreset(snapshot) {
-    const auto = customPresets.find((preset) => preset.name === AUTO_SAVE_PRESET_NAME);
-    if (auto) {
-        auto.settings = snapshot;
-        auto.updatedAt = Date.now();
-    } else {
-        customPresets.push({
-            id: `auto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-            name: AUTO_SAVE_PRESET_NAME,
-            settings: snapshot,
-            createdAt: Date.now(),
-        });
+    updateAutoContainer(snapshot);
+}
+
+/**
+ * User edited settings with a custom preset selected: overwrite that preset
+ * AND keep Auto in sync; the picker stays on the custom preset (the editing
+ * target). Snapshot comes from the broadcast payload ONLY (single source of
+ * truth) so all open pages write identical content.
+ */
+function overwriteCustomPreset(presetValue) {
+    applyPayloadToState();
+    const snapshot = { ...lastValues };
+    const target = customPresets.find((preset) => preset.name === presetValue);
+    if (target) {
+        target.settings = snapshot;
+        target.updatedAt = Date.now();
     }
+    syncAutoPreset(snapshot);
+    persistCustomPresets();
+    currentPreset = presetValue;
+    persistActivePreset();
+    renderPresetManager();
+    if (!recentlyWritten() && shouldWriteBack(snapshot, presetValue)) {
+        writeBackToTosu(presetValue, snapshot);
+        markWritten(snapshot, presetValue);
+    }
+    lastValues = { ...lastValues, ...snapshot, preset: presetValue };
 }
 
 function handleSettingsPacket(packet) {
@@ -1254,28 +1279,7 @@ function handleSettingsPacket(packet) {
         const isCustom = customPresets.some((preset) => preset.name === presetValue);
         if (isCustom) {
             if (hasManualChange) {
-                // User edited settings with a custom preset selected:
-                // overwrite that preset AND keep Auto in sync; the picker
-                // stays on the custom preset (it is the editing target).
-                // Snapshot comes from the broadcast payload ONLY (single
-                // source of truth) so all open pages write identical content.
-                applyPayloadToState();
-                const snapshot = { ...lastValues };
-                const target = customPresets.find((preset) => preset.name === presetValue);
-                if (target) {
-                    target.settings = snapshot;
-                    target.updatedAt = Date.now();
-                }
-                syncAutoPreset(snapshot);
-                persistCustomPresets();
-                currentPreset = presetValue;
-                persistActivePreset();
-                renderPresetManager();
-                if (!recentlyWritten() && shouldWriteBack(snapshot, presetValue)) {
-                    writeBackToTosu(presetValue, snapshot);
-                    markWritten(snapshot, presetValue);
-                }
-                lastValues = { ...lastValues, ...snapshot, preset: presetValue };
+                overwriteCustomPreset(presetValue);
             } else {
                 // No edits: "use" the custom preset (apply its saved content).
                 if (!applyPresetByName(presetValue)) {
@@ -1352,58 +1356,28 @@ function ensureManagerDom() {
     root.id = "preset-manager";
     root.className = "preset-manager";
     root.hidden = true;
-
-    const header = document.createElement("div");
-    header.className = "preset-manager-header";
-    const title = document.createElement("span");
-    title.className = "preset-manager-title";
-    title.textContent = "Presets";
-    const closeBtn = document.createElement("button");
-    closeBtn.id = "preset-manager-close";
-    closeBtn.className = "preset-manager-close";
-    closeBtn.type = "button";
-    closeBtn.title = "Hide preset manager";
-    closeBtn.setAttribute("aria-label", "Hide preset manager");
-    closeBtn.textContent = "\u00d7";
-    header.appendChild(title);
-    header.appendChild(closeBtn);
-
-    const body = document.createElement("div");
-    body.id = "preset-manager-body";
-    body.className = "preset-manager-body";
-
-    const hint = document.createElement("p");
-    hint.id = "preset-manager-hint";
-    hint.className = "preset-manager-hint";
-
-    const saveRow = document.createElement("div");
-    saveRow.className = "preset-manager-save";
-    const saveInput = document.createElement("input");
-    saveInput.id = "preset-save-name";
-    saveInput.className = "preset-save-name";
-    saveInput.type = "text";
-    saveInput.placeholder = "New preset name...";
-    saveInput.maxLength = 40;
-    const saveBtn = document.createElement("button");
-    saveBtn.id = "preset-save-btn";
-    saveBtn.className = "preset-btn preset-save-btn";
-    saveBtn.type = "button";
-    saveBtn.textContent = "Save current";
-    saveRow.appendChild(saveInput);
-    saveRow.appendChild(saveBtn);
-
-    root.appendChild(header);
-    root.appendChild(body);
-    root.appendChild(hint);
-    root.appendChild(saveRow);
+    root.innerHTML = `
+        <div class="preset-manager-header">
+            <span class="preset-manager-title">Presets</span>
+            <button id="preset-manager-close" class="preset-manager-close" type="button"
+                    title="Hide preset manager" aria-label="Hide preset manager">&times;</button>
+        </div>
+        <div id="preset-manager-body" class="preset-manager-body"></div>
+        <p id="preset-manager-hint" class="preset-manager-hint"></p>
+        <div class="preset-manager-save">
+            <input id="preset-save-name" class="preset-save-name" type="text"
+                   placeholder="New preset name..." maxlength="40">
+            <button id="preset-save-btn" class="preset-btn preset-save-btn" type="button">Save current</button>
+        </div>
+    `;
     document.body.appendChild(root);
 
     managerRootEl = root;
-    managerBodyEl = body;
-    managerSaveInputEl = saveInput;
-    managerHintEl = hint;
+    managerBodyEl = root.querySelector("#preset-manager-body");
+    managerSaveInputEl = root.querySelector("#preset-save-name");
+    managerHintEl = root.querySelector("#preset-manager-hint");
 
-    closeBtn.addEventListener("click", () => {
+    root.querySelector("#preset-manager-close").addEventListener("click", () => {
         root.hidden = true;
     });
 
@@ -1421,8 +1395,8 @@ function ensureManagerDom() {
             false,
         );
     };
-    saveBtn.addEventListener("click", saveCurrent);
-    saveInput.addEventListener("keydown", (event) => {
+    root.querySelector("#preset-save-btn").addEventListener("click", saveCurrent);
+    managerSaveInputEl.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
             saveCurrent();
         }
@@ -1439,65 +1413,39 @@ function showManagerHint(message, isError) {
     managerHintEl.classList.toggle("error", Boolean(isError));
 }
 
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
 function buildPresetRow(preset, { isSystem, active, actions = isSystem ? "apply" : "all" }) {
     const row = document.createElement("div");
     row.className = `preset-item${active ? " active" : ""}`;
     row.dataset.presetName = preset.name;
 
-    const info = document.createElement("div");
-    info.className = "preset-item-info";
+    const name = escapeHtml(preset.name);
+    const desc = escapeHtml(preset.description || "");
+    const actionsHtml = actions !== "none"
+        ? `<div class="preset-item-actions">
+            <button type="button" class="preset-btn preset-btn-apply" data-action="apply">Apply</button>
+            ${actions === "all"
+                ? `<button type="button" class="preset-btn" data-action="rename">Rename</button>
+                   <button type="button" class="preset-btn preset-btn-danger" data-action="delete">Delete</button>`
+                : ""}
+        </div>`
+        : "";
 
-    const nameEl = document.createElement("div");
-    nameEl.className = "preset-item-name";
-    nameEl.textContent = preset.name;
-    if (isSystem) {
-        const badge = document.createElement("span");
-        badge.className = "preset-item-badge";
-        badge.textContent = "System";
-        nameEl.appendChild(badge);
-    }
-
-    const descEl = document.createElement("div");
-    descEl.className = "preset-item-desc";
-    descEl.textContent = preset.description || "";
-    if (preset.description) {
-        // Native tooltip shows the full description when the row is narrow.
-        descEl.title = preset.description;
-    }
-    info.appendChild(nameEl);
-    info.appendChild(descEl);
-
-    if (actions !== "none") {
-        const actionsEl = document.createElement("div");
-        actionsEl.className = "preset-item-actions";
-
-        const applyBtn = document.createElement("button");
-        applyBtn.type = "button";
-        applyBtn.className = "preset-btn preset-btn-apply";
-        applyBtn.textContent = "Apply";
-        applyBtn.dataset.action = "apply";
-        actionsEl.appendChild(applyBtn);
-
-        if (actions === "all") {
-            const renameBtn = document.createElement("button");
-            renameBtn.type = "button";
-            renameBtn.className = "preset-btn";
-            renameBtn.textContent = "Rename";
-            renameBtn.dataset.action = "rename";
-            actionsEl.appendChild(renameBtn);
-
-            const deleteBtn = document.createElement("button");
-            deleteBtn.type = "button";
-            deleteBtn.className = "preset-btn preset-btn-danger";
-            deleteBtn.textContent = "Delete";
-            deleteBtn.dataset.action = "delete";
-            actionsEl.appendChild(deleteBtn);
-        }
-
-        row.appendChild(actionsEl);
-    }
-
-    row.appendChild(info);
+    row.innerHTML = `
+        <div class="preset-item-info">
+            <div class="preset-item-name">${name}${isSystem ? '<span class="preset-item-badge">System</span>' : ""}</div>
+            <div class="preset-item-desc"${preset.description ? ` title="${escapeHtml(preset.description)}"` : ""}>${desc}</div>
+        </div>
+        ${actionsHtml}
+    `;
     return row;
 }
 
