@@ -6,7 +6,7 @@
 ![Features](img/features.gif)
 
 <details>
-<summary>更新: 新主题效果图</summary>
+<summary>主题效果图</summary>
 <img src="img/themeLN.jpg" alt="LN" width="400">
 <img src="img/themeRC.jpg" alt="RC" width="400">
 <img src="img/full.jpg" alt="Full" width="400">
@@ -31,9 +31,9 @@
 5. 游戏内界面以及OBS的使用方法见 tosu 相关文档。
 
 ## 难度估计算法基准测试
-- 该插件的难度估计算法经过了基于真实谱面数据的基准测试，测试结果可以在[此处](https://leoblackmt.github.io/osumania_map_analyser/)查看。测试涵盖了多个算法在不同类型谱面上的表现，帮助玩家选择适合自己的算法。
+- 基准测试已迁移至独立仓库 [VSRG-DanEstimation-Benchmark](https://github.com/LeoBlackMT/VSRG-DanEstimation-Benchmark)，测试结果可以在[此处](https://benchmark.leoblack.top/)查看。测试涵盖了多个算法在不同类型谱面上的表现，帮助玩家选择适合自己的算法。
 - 需要注意的是，虽然基准测试提供了算法表现的参考，但实际使用中可能会受到谱面特征、mod组合等多种因素的影响，建议玩家结合自己的游玩体验进行判断。
-- 你可以在[此处](https://github.com/LeoBlackMT/osumania_map_analyser/tree/main/docs/data/files.7z)下载用于基准测试的谱面数据，但是请注意阅读免责声明，合理使用这些数据。
+- 你可以在[此处](https://github.com/LeoBlackMT/VSRG-DanEstimation-Benchmark/tree/main/samples/samples.7z)下载用于基准测试的谱面数据，但是请注意阅读免责声明，合理使用这些数据。
 
 ## 注意事项
 1. 插件需要在 tosu 的 `static` 目录下运行，注意不要嵌套文件夹，确保正确放置。
@@ -46,6 +46,23 @@
 
 ## 设置说明
 注意：推荐直接使用默认设置开始体验，之后再根据个人喜好进行调整。
+- **预设（Preset）**：一键应用整套配置的方案。
+    - **Preset**（设置页面顶部的下拉框）：
+        - Default: 初始状态，表示当前使用默认/手动配置。
+        - Auto: 跟随模式。**只要您修改任意设置并保存，预设栏会自动跳转到 Auto**，您的全部改动会自动保存进名为「Auto」的预设（最近一次手动配置，随时可以切回）。
+        - im osu main: 卡片主体显示难度变化图(Graph)，左上角胶囊显示键型(Pattern)，右上角显示估计难度(Difficulty)。
+        - Pattern Focus: 卡片主体与左上角胶囊均显示键型分析，右上角显示估计难度。
+        - Etterna Focus: 卡片主体显示Etterna键型分，左上/右上胶囊显示MSD。
+        - Full Overview: 显示完整内容(Full)，左上角显示ReworkSR，右上角显示难度变化图。
+        - Minimal: 极简模式，仅显示星数（隐藏卡片主体、右上角内容与谱面标签胶囊）。
+        - Custom 1 / Custom 2 / Custom 3: 三个预置的自定义槽位，**初始内容与 Default 完全相同**。**只有选中某个 Custom 槽位后，再修改设置并保存，该槽位才会更新**（锚定）；未锚定时改动一律进入 Auto。
+        - 说明：选择内置预设（Default / im osu main 等）会立即用预设覆盖**所有**设置并保存；此后如果您再修改任意设置，预设栏会自动跳转到 Auto。
+    - **自定义预设**：在浏览器中打开叠加页并加上 `?edit=1` 参数（例如 `http://localhost:24050/你的插件文件夹名/index.html?edit=1`），页面右上角会显示预设管理器面板，支持：
+        - **Save current**：把当前全部设置保存为自定义预设（同名保存会覆盖更新，最多 5 个自定义预设）。
+        - 点击任意预设的 **Apply** 立即应用；**Rename** 重命名自定义预设；**Delete** 删除自定义预设。
+        - **锚定规则**：先点击某个自定义预设的 Apply（或在下拉框选择它），此后在设置页面修改并保存设置时，改动会保存进**该自定义预设**；如果没有锚定任何自定义预设，改动一律保存进「Auto」预设。
+        - 自定义预设保存在浏览器本地（localStorage），应用时会同步写回 tosu 设置。
+    - 注意：应用预设会覆盖**所有**设置项（模块、主题、功能、网络等），并写入 tosu 的持久化配置；选择内置预设后单独修改任意设置会自动转入 Auto 跟随模式。OBS/游戏内叠加画面不受影响，预设管理器面板仅在带 `?edit=1` 打开时显示。
 - **模块设定**：
     - **Card Body Content**：选择在卡片主体显示的内容。
         - None: 不显示任何内容。即短卡片模式。
@@ -90,10 +107,13 @@
     - **Metadata Marquee**: 是否启用滚动显示谱面信息功能。
     - **Numeric Difficulty**: 是否显示数值化难度。
         - 将在RC估计算法下于ESTIMATE DIFFICULTY字样后显示数值化难度。
-    - **Card Visibility**: 控制卡片的显示时机。
-        - 可选值：`DuringPlay`（仅在游玩时显示）、`OutsidePlay`（仅在非游玩时显示）、`Always`（始终显示）。默认值为 `Always`。
+    - **LN Star Rating**: 显示LN星数。
+        - 启用后将在 ESTIMATE DIFFICULTY 括号内显示LN特化星数。
+        - 该选项仅在启用 Improve Sunny LN Estimation 时有效，否则将显示原始 Rework 星数。
     - **Reverse Card Extension**: 是否反转卡片延展方向。
         - 启用后卡片底边保持锚定，扩展时向上生长；关闭时默认向下扩展。
+    - **Card Visibility**: 控制卡片的显示时机。
+        - 可选值：`DuringPlay`（仅在游玩时显示）、`OutsidePlay`（仅在非游玩时显示）、`Always`（始终显示）。默认值为 `Always`。
     - **Card Opacity**: 设置卡片整体透明度。
         - 可选范围：100% / 95% / 90% / 80% / 70%。
     - **Content Background Blur**: 是否启用背景图片模糊效果。
@@ -107,11 +127,28 @@
         - 启用后默认每天最多检查一次 GitHub latest release。
         - 当从“关闭”切换到“开启”时，会立即额外触发一次检查。
         - 当发现新版本时，状态栏左侧星形图标会显示。
+    - **Result Cache**: 是否启用分析结果缓存。
+        - 启用后，切换到已分析过的谱面（或切换 mod 后又切回）将立即显示结果，无需重新计算。
+        - 该选项只影响显示速度，不影响计算结果。默认启用。
     - **Vibro Detection**: 是否启用Vibro检测功能。
         - 推荐启用：启用后将检测谱面是否为Vibro谱面，并在估计难度中显示为Vibro。否则您将看到被极度拉高的难度估计。
     - **SV Detection**: 是否启用SV谱面检测功能。
         - 启用后当检测到变速时，将在左下角显示SV标签。
         - 注意：如果未开启显示谱面标签胶囊，SV标签将不会显示。
+    - **Show 6K Constant Rating**: 是否启用6K定数显示功能。
+        - 当且仅当谱面为6K时，在左上角星数胶囊覆盖显示6K定数，胶囊角标显示"LV"。
+        - 定数计算公式：`sunnySR × 200/81 + 7/6`，保留小数点后两位。
+        - 开启后将在6K谱面时强制覆盖左上角胶囊显示内容为定数，不受Top-left Capsule Text设置影响。
+    - **Extended Estimation Range**: 是否启用扩展估计范围。
+        - 不推荐：启用后将使用扩展区间表进行难度估计，大幅提高估计软上限。
+        - 仅对 Sunny 估算算法生效。扩展区间覆盖 4K RC、4K LN、7K RC；6K/7K LN 无扩展。
+        - 注意：启用后估计值将发生变化；扩展区间部分纯属娱乐性质，不保证准确度。
+        - 拓展部分的数据来源请见[此处](https://github.com/inuiyumegan/dan_piecewise#%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86)。
+    - **Improve Sunny LN Estimation**: 优化Sunny对于LN的算法
+        - 在Sunny算法判断星数时删去了谱面中的纯米部分和LN密度过低的部分。使得Sunny算法在LN谱面上的表现更为准确。
+        - 注意：该选项对所有使用了Sunny算法的功能生效。
+    - **Analyze LN Parts**: 按LN分析谱面成分。
+        - 显示谱面中有多少部分属于LN/HB/Mix/RC，并显示在左下角谱面标签胶囊中。
     - **Pause Detection Threshold**: 设置暂停检测的时间阈值（毫秒）。
         - 只有当游戏时间冻结超过该时长后，才会被判定为一次暂停。
         - 默认值为500ms。如果游戏卡顿导致误判，可适当提高该值。
@@ -144,13 +181,16 @@
     - **Azusa Sunny Reference Force HO**
         - 启用后将强制Azusa算法将谱面视为纯米。
         - 默认启用，请不要随意关闭。
+    - **Always Show LN Difficulty**
+        - 始终显示LN难度，默认关闭。
+        - 该选项仅在启用 Improve Sunny LN Estimation 时有效，否则会误判非LN图的LN难度。
 
 ## Roxy 算法说明
 Roxy 是一个 4K RC 元结构估算器。其核心分为两层：第一层对谱面进行 7 个方面结构分析，产出结构化数值难度；第二层通过 GBDT（梯度提升决策树）元模型融合 Azusa/Sunny/Daniel 的参考预测值，输出最终难度。
 请注意，由于使用了树模型进行决策，GBDT 元模型可能会存在边界不连续的情况：输入特征的微小变化（例如倍速相差0.01）可能会跨过决策树的分割阈值，导致输出难度出现不成比例的大跳跃。用户在使用时应当注意到这是树模型固有的特性。
 
 ## Azusa 算法说明
-该算法在谱面本身的基础上，融合了Daniel和Sunny Rework的结果，并针对4K RC谱面进行了特定的调整。如有需要，请前往[此处](azusa_algorithm.md)(英文)查看详细说明。
+该算法在谱面本身的基础上，融合了Daniel和Sunny Rework的结果，并针对4K RC谱面进行了特定的调整。如有需要，请前往[此处](docs/azusa_algorithm.md)(英文)查看详细说明。
 
 ## 参考内容
 - [tosu](https://tosu.app): 本插件的运行环境和基础框架。
@@ -160,10 +200,11 @@ Roxy 是一个 4K RC 元结构估算器。其核心分为两层：第一层对�
 - [Daniel](https://thebagelofman.github.io/Daniel/): 使用了Daniel的算法进行难度估计。
 - [Companella](https://github.com/Leinadix/companella): 使用了Companella的算法进行难度估计。
 
-## 特别感谢
+## 贡献者
 - [inuiyumegan](https://github.com/inuiyumegan): 提供了大量谱面数据用于算法调试和Benchmark。
 - [greycsont](https://github.com/greycsont): 提供了部分功能。
 - [ZHAO20060708](https://github.com/ZHAO20060708): 提供了精美的Lazer主题和Full模式。
+- [SST-03](https://github.com/SST-03) & [AkutaZehy](https://github.com/AkutaZehy): 提供了改进的 Sunny LN 算法。
 
 ---------
 本页累计访问量，自2026/6/21起统计，感谢大家的支持！

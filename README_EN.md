@@ -8,7 +8,7 @@ This repository is an entirely AI-crafted in-game overlay (ppcounter) for [tosu]
 ![Features](img/features.gif)
 
 <details>
-<summary>Update: New Theme Screenshots</summary>
+<summary>New Theme Screenshots</summary>
 <img src="img/themeLN.jpg" alt="LN" width="400">
 <img src="img/themeRC.jpg" alt="RC" width="400">
 <img src="img/full.jpg" alt="Full" width="400">
@@ -33,9 +33,9 @@ This repository is an entirely AI-crafted in-game overlay (ppcounter) for [tosu]
 5. For instructions on using the in-game interface and OBS, please refer to the relevant tosu documentation.
 
 ## Estimator Algorithm Benchmark
-- The difficulty estimation algorithms of this plugin have been benchmarked against real beatmap data, and the results can be viewed [here](https://leoblackmt.github.io/osumania_map_analyser/). The tests cover the performance of multiple algorithms across different types of beatmaps, helping players choose the one that suits them best.
+- The benchmark has been migrated to the separate repository [VSRG-DanEstimation-Benchmark](https://github.com/LeoBlackMT/VSRG-DanEstimation-Benchmark), and the results can be viewed [here](https://benchmark.leoblack.top/). The tests cover the performance of multiple algorithms across different types of beatmaps, helping players choose the one that suits them best.
 - It is important to note that while the benchmark provides a reference for algorithm performance, actual usage may be influenced by various factors such as beatmap characteristics and mod combinations. Players are encouraged to combine the benchmark results with their own gameplay experience for judgment.
-- You can download the beatmap data used for benchmarking [here](https://github.com/LeoBlackMT/osumania_map_analyser/tree/main/docs/data/files.7z). However, please read the disclaimer and use the data responsibly.
+- You can download the beatmap data used for benchmarking [here](https://github.com/LeoBlackMT/VSRG-DanEstimation-Benchmark/tree/main/samples/samples.7z). However, please read the disclaimer and use the data responsibly.
 
 ## Notes
 1. The plugin needs to run in the `static` directory of tosu. Ensure it is placed directly in that directory, not nested inside another folder.
@@ -47,6 +47,23 @@ This repository is an entirely AI-crafted in-game overlay (ppcounter) for [tosu]
 
 ## Settings
 Note: It is recommended to start with the default settings and then adjust according to personal preference.
+- **Presets**: Apply a whole saved configuration with one click.
+    - **Preset** (the dropdown at the top of the settings page):
+        - Default: Initial state; the current default/manual configuration is in use.
+        - Auto: Follow mode. **As soon as you change any setting and save, the preset picker automatically moves to Auto** and your whole configuration is saved into the "Auto" preset (your latest manual configuration — you can always switch back to it).
+        - im osu main: Difficulty graph in the card body, pattern in the top-left capsule, estimated difficulty at top-right.
+        - Pattern Focus: Pattern analysis in the card body and the top-left capsule, estimated difficulty at top-right.
+        - Etterna Focus: Etterna skillset bars in the card body with MSD on both capsules.
+        - Full Overview: Everything at once (Full body), ReworkSR on the left, graph at top-right.
+        - Minimal: Star rating only — hides the card body, the top-right content and the map tag capsule.
+        - Custom 1 / Custom 2 / Custom 3: three pre-provisioned custom slots, **initially identical to Default**. **Only after you select one of the Custom slots and then change + save settings does that slot get updated** (anchoring); without an anchor every change goes into Auto.
+        - Note: picking a built-in preset (Default / im osu main / ...) immediately overwrites **all** settings with the preset and saves them; afterwards any manual change automatically moves the picker to Auto.
+    - **Custom presets**: open the overlay page in your browser with the `?edit=1` parameter (e.g. `http://localhost:24050/<your plugin folder>/index.html?edit=1`) to show the preset manager panel at the top-right corner:
+        - **Save current**: save the current full configuration as a custom preset (same-name saves overwrite; up to 5 custom presets).
+        - **Apply** on any preset to switch to it immediately; **Rename** and **Delete** manage your custom presets.
+        - **Anchor rule**: first Apply a custom preset (or pick it in the dropdown); then changes made and saved in the settings page are saved into **that custom preset**. Without an anchored custom preset, every change is saved into the "Auto" preset instead.
+        - Custom presets are stored in the browser (localStorage); applying syncs the values back to tosu.
+    - Note: applying a preset overwrites **all** settings (modules, theme, functionality, network, etc.) and persists them into tosu's configuration; after picking a built-in preset, any manual change switches you back to Auto follow mode. OBS / in-game overlay output is unaffected — the manager panel only appears when the page is opened with `?edit=1`.
 - **Module Settings**:
     - **Card Body Content**: Select what to display in the main body of the card.
         - None: Displays nothing. Short card mode.
@@ -91,10 +108,13 @@ Note: It is recommended to start with the default settings and then adjust accor
     - **Metadata Marquee**: Whether to enable horizontal scrolling for beatmap metadata.
     - **Numeric Difficulty**: Whether to display numerical difficulty values.
         - When enabled, numerical difficulty will be shown after the "ESTIMATE DIFFICULTY" label under the RC estimation algorithm.
-    - **Card Visibility**: Control when the card is shown.
-        - Available values: `DuringPlay` (show only while playing), `OutsidePlay` (show only when not playing), `Always` (always show). Defaults to `Always`.
+    - **LN Star Rating**: Show LN Star Rating
+        - Shows LN Star Rating after the "ESTIMATE DIFFICULTY" label.
+        - This option is only effective when "Improve Sunny LN Estimation" is enabled; otherwise, it will display the original Rework star rating.
     - **Reverse Card Extension**: Whether to reverse the card expansion direction.
         - When enabled, the card stays anchored at the bottom and grows upward; when disabled, it expands downward by default.
+    - **Card Visibility**: Control when the card is shown.
+        - Available values: `DuringPlay` (show only while playing), `OutsidePlay` (show only when not playing), `Always` (always show). Defaults to `Always`.
     - **Card Opacity**: Set the overall card opacity.
         - Available values: 100% / 95% / 90% / 80% / 70%.
     - **Content Background Blur**: Whether to enable background image blur for content sections.
@@ -108,14 +128,31 @@ Note: It is recommended to start with the default settings and then adjust accor
         - When enabled, it checks the GitHub latest release at most once per day by default.
         - When switching from disabled to enabled, it immediately triggers one extra check.
         - The star icon on the left side of the status bar is shown only when a newer version is available.
+    - **Result Cache**: Enable caching of analysis results.
+        - When enabled, revisiting an already analyzed map (or switching mods and back) shows results instantly without recomputing.
+        - This option only affects display speed, not the results themselves. Enabled by default.
     - **Vibro Detection**: Whether to enable vibro detection.
         - Recommended: When enabled, the plugin will detect if a beatmap is a vibro map and display it as "Vibro" in the estimated difficulty; otherwise, you will see an extremely inflated difficulty estimate.
     - **SV Detection**: Whether to enable SV beatmap detection.
         - When enabled, an SV tag will be displayed in the bottom-left corner when speed variation is detected.
         - Note: If the Map Tag Capsule display is not enabled, the SV tag will not be shown.
+    - **Show 6K Constant Rating**: Whether to enable the 6K constant rating display.
+        - When enabled, for 6K beatmaps only, the top-left star capsule will be overridden with the constant rating and display an "LV" badge.
+        - Formula: `sunnySR × 200/81 + 7/6`, rounded to 2 decimal places.
+        - When enabled, the constant rating will force-override the top-left capsule content on 6K beatmaps, regardless of the Top-left Capsule Text setting.
+    - **Extended Estimation Range**: Whether to enable the extended estimation range.
+        - Not Recommended: When enabled, extended interval tables are used for difficulty estimation, significantly raising the estimation soft cap.
+        - Only effective with the Sunny estimator. Extended interval cover 4K RC, 4K LN, 7K RC; not extending 6K/7K LN.
+        - Note: Estimates change when enabled. The extended tiers are purely experimental and accuracy is not guaranteed.
+        - The data source for the extended tiers can be found [here](https://github.com/inuiyumegan/dan_piecewise#%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86).
     - **Pause Detection Threshold**: Set the minimum duration (ms) for a time freeze to be counted as a pause.
         - A pause is only confirmed when the game time has been frozen for longer than this threshold.
         - Default is 500ms. If game lag causes false positives, increase this value appropriately.
+    - **Improve Sunny LN Estimation**: Improve Sunny Algorithm's LN Estimation
+        - Removes rice parts and LN parts which LN% is too low, before Sunny Algorithm calculate Star Rate, making Sunny Algorithm more accurate on LN maps.
+        - Note: This option affects all features that use the Sunny algorithm.
+    - **Analyze LN Parts**: Analyze LN Parts by LN
+        - Display the percentage of beatmaps which are in LN/HB/Mix/RC parts, and show it in the bottom-left beatmap tag capsule.
     - **Estimator Algorithm**: Choose the algorithm used for difficulty estimation.
         - Mixed: (Recommended) A hybrid algorithm combining the four below, offering relatively higher accuracy. Automatically selects the algorithm best suited for the current beatmap.
         - Azusa: A fusion algorithm oriented towards 4K RC, combining the algorithms below with targeted adjustments. Performs well in RC scenarios but is not suitable for LN-dominant beatmaps.
@@ -145,13 +182,16 @@ Note: It is recommended to start with the default settings and then adjust accor
     - **Azusa Sunny Reference Force HO**
         - When enabled, the Azusa algorithm will be forced to treat the beatmap as a pure RC (HO) map.
         - It is enabled by default; please do not disable it casually.
+    - **Always Show LN Difficulty**
+        - When enabled, always show LN Difficulty. Default is disabled.
+        - This option only takes effect when "Improve Sunny LN Estimation" is enabled, or it may misjudge LN difficulty for non-LN maps.
 
 ## Roxy Algorithm Explanation
 Roxy is a 4K RC meta-structural estimator. Its core consists of two layers: the first layer performs structural analysis on the beatmap across 7 aspects, producing structured numerical difficulty; the second layer blends reference predictions from Azusa/Sunny/Daniel using a GBDT (Gradient Boosted Decision Tree) meta-model to output the final difficulty.
 Please note that as a tree-based model, the GBDT meta-model can exhibit boundary discontinuities: a miniscule change in input features (e.g., a 0.01× speed rate difference) may cross a decision tree split threshold and produce a disproportionately large jump in the output difficulty. Users should be aware of this inherent characteristic of tree-based estimators.
 
 ## Azusa Algorithm Explanation
-This algorithm builds on the beatmap itself, combining the results of Daniel and Sunny Rework, with specific adjustments targeted at 4K RC beatmaps. For more details, please refer to [this document](azusa_algorithm.md).
+This algorithm builds on the beatmap itself, combining the results of Daniel and Sunny Rework, with specific adjustments targeted at 4K RC beatmaps. For more details, please refer to [this document](docs/azusa_algorithm.md).
 
 ## References
 - [tosu](https://tosu.app): The runtime environment and basic framework for this plugin.
@@ -161,10 +201,11 @@ This algorithm builds on the beatmap itself, combining the results of Daniel and
 - [Daniel](https://thebagelofman.github.io/Daniel/): Daniel's algorithm is used for difficulty estimation.
 - [Companella](https://github.com/Leinadix/companella): Companella's algorithm is used for difficulty estimation.
 
-## Special Thanks
+## Contributors
 - [inuiyumegan](https://github.com/inuiyumegan): Provided a large amount of beatmap data for algorithm debugging and benchmarking.
 - [greycsont](https://github.com/greycsont): Contributed several features.
 - [ZHAO20060708](https://github.com/ZHAO20060708): Provided the polished Lazer theme and Full mode design.
+- [SST-03](https://github.com/SST-03) & [AkutaZehy](https://github.com/AkutaZehy): Provided the improved Sunny LN algorithm.
 
 ---------
 This page has been viewed since June 21, 2026, thanks for your support!
