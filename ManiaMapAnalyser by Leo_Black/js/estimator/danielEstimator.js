@@ -34,7 +34,7 @@ export function runDanielEstimatorFromText(osuText, options = {}) {
         ...parsed,
         estDiff: useDanielDifficulty
             ? danielDifficulty.label
-            : estDiff(parsed.star, parsed.lnRatio, parsed.columnCount, options.extendedEstimationRange === true, options.enableAlwaysShowLNDifficulty === true),
+            : estDiff(parsed.star, parsed.lnRatio, parsed.columnCount, options.extendedEstimationRange === true),
         numericDifficulty,
         numericDifficultyHint: useDanielDifficulty && !Number.isFinite(numericDifficulty)
             ? "N/A"

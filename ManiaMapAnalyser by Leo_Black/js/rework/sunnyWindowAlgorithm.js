@@ -1,5 +1,6 @@
 // Copied from sunnyAlgorithm.js
 import { OsuFileParser } from "../parser/osuFileParser.js";
+import { state } from "../app/appContext.js";
 
 const BREAK_ZERO_THRESHOLD_MS = 400;
 const GRAPH_RESAMPLE_INTERVAL_MS = 100;
@@ -194,7 +195,7 @@ function findNextNoteInColumn(note, times, noteSeqByColumn) {
     return idx + 1 < noteSeqByColumn[k].length ? noteSeqByColumn[k][idx + 1] : [0, 1e9, 1e9];
 }
 
-function preprocessFile(osuText, speedRate, odFlag, cvtFlag, enableAnalyzeLN = false) {
+function preprocessFile(osuText, speedRate, odFlag, cvtFlag) {
     const pObj = new OsuFileParser(osuText);
     pObj.process();
     let p = pObj.getParsedData();
@@ -331,7 +332,7 @@ function preprocessFile(osuText, speedRate, odFlag, cvtFlag, enableAnalyzeLN = f
 
     const LNParts = getLNParts(false, osuText, speedRate, odFlag, cvtFlag);
 
-    const shouldCalcData = enableAnalyzeLN;
+    const shouldCalcData = state.enableAnalyzeLN;
     if (LNParts.length <= 0) {
         return {
             status: "NoLN",
@@ -1299,7 +1300,7 @@ export function calculateLN(osuText, speedRate = 1.0, odFlag = null, cvtFlag = n
     columnCount,
     typePercentageData,
     lnPartsRatio,
-    } = preprocessFile(osuText, speedRate, odFlag, cvtFlag, options?.enableAnalyzeLN === true);
+    } = preprocessFile(osuText, speedRate, odFlag, cvtFlag);
 
     if (status === "Fail") return -1;
     if (status === "NotMania") return -2;

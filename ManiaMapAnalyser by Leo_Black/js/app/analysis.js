@@ -444,8 +444,6 @@ export async function fetchBeatmapFile(reason) {
                     cvtFlag: state.cvtFlag,
                     withGraph: state.diffText === "Graph" || showsGraph,
                     extendedEstimationRange: state.extendedEstimationRange,
-                    enableAlwaysShowLNDifficulty: state.enableAlwaysShowLNDifficulty,
-                    enableAnalyzeLN: state.enableAnalyzeLN,
                 };
 
                 const azusaOptions = {
