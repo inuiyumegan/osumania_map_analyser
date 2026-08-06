@@ -3,10 +3,11 @@ export const APP_CONFIG = {
     socketHost: "localhost:24050",
 
     options: {
+        preset: ["Default", "im osu main", "Pattern Focus", "Etterna Focus", "Full Overview", "Minimal", "Custom 1", "Custom 2", "Custom 3", "Auto"],
         contentBar: ["None", "Auto", "Pattern", "Etterna", "Graph", "Full"],
         srText: ["Auto", "ReworkSR", "MSD", "Pattern", "InterludeSR"],
         diffText: ["None", "Graph", "Difficulty", "MSD", "Pattern", "ReworkSR", "InterludeSR"],
-        estimatorAlgorithm: ["Azusa", "Roxy", "Mixed", "Sunny", "Daniel", "Companella"],
+        estimatorAlgorithm: ["Azusa", "Roxy", "Mixed", "Sunny", "Daniel", "Companella", "SunnyWindow"],
         etternaVersion: ["0.68.0-Unofficial", "0.70.0", "0.72.0", "0.72.3", "0.74.0"],
         companellaEtternaVersion: ["0.68.0-Unofficial", "0.70.0", "0.72.0", "0.72.3", "0.74.0"],
         cardOpacity: ["100%", "95%", "90%", "80%", "70%"],
@@ -15,6 +16,45 @@ export const APP_CONFIG = {
         reverseCardExtendDirection: [true, false],
         modeTag: ["RC", "LN", "HB", "Mix", "SV"],
     },
+
+    presets: [
+        {
+            id: "default",
+            name: "Default",
+            description: "Reset to the factory default configuration.",
+            settings: {},
+        },
+        {
+            id: "im-osu-main",
+            name: "im osu main",
+            description: "Difficulty graph in the card body, pattern in the top-left capsule, estimated difficulty at top-right.",
+            settings: { contentBar: "Graph", srText: "Pattern", diffText: "Difficulty" },
+        },
+        {
+            id: "pattern-focus",
+            name: "Pattern Focus",
+            description: "Pattern analysis in the card body and the top-left capsule.",
+            settings: { contentBar: "Pattern", srText: "Pattern", diffText: "Difficulty" },
+        },
+        {
+            id: "etterna-focus",
+            name: "Etterna Focus",
+            description: "Etterna skillset bars in the card body with MSD on both capsules.",
+            settings: { contentBar: "Etterna", srText: "MSD", diffText: "MSD" },
+        },
+        {
+            id: "full-overview",
+            name: "Full Overview",
+            description: "Pattern, Etterna and graph together, ReworkSR on the left, graph at top-right.",
+            settings: { contentBar: "Full", srText: "ReworkSR", diffText: "Graph" },
+        },
+        {
+            id: "minimal",
+            name: "Minimal",
+            description: "Star rating only: no card body content, no top-right content, no map tag capsule.",
+            settings: { contentBar: "None", srText: "ReworkSR", diffText: "None", showModeTagCapsule: false },
+        },
+    ],
 
     starStops: {
         background: [
@@ -74,6 +114,7 @@ export const APP_CONFIG = {
     },
 
     defaults: {
+        preset: "Default",
         wsEndpoint: "localhost:24050",
         autoMode: false,
         useDanielAlgorithm: false,
@@ -88,6 +129,8 @@ export const APP_CONFIG = {
         vibroDetection: true,
         disableVibroDetection: false,
         useSvDetection: true,
+        display6kLevel: true,
+        extendedEstimationRange: false,
         showModeTagCapsule: true,
         enableNumericDifficulty: true,
         cardVisibility: "Always",
@@ -95,6 +138,7 @@ export const APP_CONFIG = {
         cardRadius: "Medium",
         cardBgBlur: "4px",
         enableUpdateCheck: true,
+        enableResultCache: true,
         reverseCardExtendDirection: false,
         useOsuFont: true,
         enableOsuTheme: true,
@@ -105,6 +149,10 @@ export const APP_CONFIG = {
         srText: "ReworkSR",
         diffText: "Difficulty",
         debugUseAmount: false,
+        forceSunnyWindow: false,
+        enableLNDifficulty: false,
+        enableAnalyzeLN: false,
+        enableAlwaysShowLNDifficulty: true,
     },
 
     mods: {

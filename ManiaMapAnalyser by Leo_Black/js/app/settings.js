@@ -21,6 +21,7 @@ import {
     parseEnableCoverArtValue,
     parseCustomBackgroundColorValue,
     parseEnablePauseDetectionValue,
+    parseEnableResultCacheValue,
     parsePauseDetectionThresholdValue,
     parseEstimatorAlgorithmValue,
     parseAzusaSunnyReferenceHoValue,
@@ -34,8 +35,15 @@ import {
     parseUseOsuFontValue,
     parseSrTextValue,
     parseSvDetectionValue,
+    parseDisplay6kLevelValue,
+    parseExtendedEstimationRangeValue,
     parseVibroDetectionValue,
     parseWsEndpointValue,
+    parseForceSunnyWindowValue,
+    parseEnableLNDifficultyValue,
+    parseEnableAnalyzeLNValue,
+    parseEnableAlwaysShowLNDifficultyValue,
+    parsePresetValue,
     patternClustersEl,
     reworkStarEl,
     socket,
@@ -55,6 +63,7 @@ import {
     normalizeWsEndpointValue,
     normalizeSrTextValue,
 } from "../parser/settingsParser.js";
+import { ensureAndApplyPresetByName, autoSaveCurrentPreset, AUTO_SAVE_PRESET_NAME } from "./presets.js";
 import {
     clearDiffGraph,
     redrawPauseMarkers,
@@ -72,6 +81,7 @@ import { applyCoverThemeForBeatmap, resetCoverTheme } from "./coverTheme.js";
 import { initTriangleField } from "./triangles.js";
 import { scheduleRecompute } from "./scheduler.js";
 import { runUpdateCheckIfDue, runUpdateCheckNow } from "./updateChecker.js";
+import { clearResultCache } from "./resultCache.js";
 
 function isAutoDisplayEnabled() {
     return state.userSrText === "Auto" || state.userContentBar === "Auto";
@@ -329,6 +339,19 @@ export function applyUseSvDetectionSetting(value) {
     return changed;
 }
 
+export function applyDisplay6kLevelSetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.display6kLevel);
+    const changed = state.display6kLevel !== next;
+    state.display6kLevel = next;
+    return changed;
+}
+export function applyExtendedEstimationRangeSetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.extendedEstimationRange);
+    const changed = state.extendedEstimationRange !== next;
+    state.extendedEstimationRange = next;
+    return changed;
+}
+
 export function applyWsEndpointSetting(value) {
     const next = normalizeWsEndpointValue(value, APP_CONFIG.defaults.wsEndpoint || APP_CONFIG.socketHost);
     const changed = state.wsEndpoint !== next;
@@ -338,6 +361,34 @@ export function applyWsEndpointSetting(value) {
         socket.setHost(next, true);
     }
 
+    return changed;
+}
+
+export function applyForceSunnyWindowSetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.forceSunnyWindow);
+    const changed = state.forceSunnyWindow !== next;
+    state.forceSunnyWindow = next;
+    return changed;
+}
+
+export function applyEnableLNDifficultySetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.enableLNDifficulty);
+    const changed = state.enableLNDifficulty !== next;
+    state.enableLNDifficulty = next;
+    return changed;
+}
+
+export function applyEnableAnalyzeLNSetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.enableAnalyzeLN);
+    const changed = state.enableAnalyzeLN !== next;
+    state.enableAnalyzeLN = next;
+    return changed;
+}
+
+export function applyEnableAlwaysShowLNDifficultySetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.enableAlwaysShowLNDifficulty);
+    const changed = state.enableAlwaysShowLNDifficulty !== next;
+    state.enableAlwaysShowLNDifficulty = next;
     return changed;
 }
 
@@ -462,6 +513,29 @@ export function applyDiffTextSetting(value) {
     setRuntimeDiffText(next);
 
     return changed;
+}
+
+export function applyPresetSetting(value) {
+    const candidate = value || "Custom";
+    if (state.preset === candidate) {
+        return false;
+    }
+
+    // "Auto" is a system marker, not an applicable snapshot: it only means
+    // "keep following my manual changes" (the Auto container is managed by
+    // autoSaveCurrentPreset). Never apply or write back anything for it here.
+    if (candidate === AUTO_SAVE_PRESET_NAME) {
+        state.preset = candidate;
+        return true;
+    }
+
+    // Unknown names (e.g. the default "Custom N" slots picked in the
+    // dashboard dropdown) are lazily materialized as real custom presets and
+    // then applied; "Custom" or anything else unresolvable falls back to no
+    // preset.
+    const applied = ensureAndApplyPresetByName(candidate);
+    state.preset = applied ? candidate : "Custom";
+    return true;
 }
 
 export function applyEstimatorAlgorithmSetting(value) {
@@ -614,6 +688,19 @@ export function applyEnableUpdateCheckSetting(value) {
     return changed;
 }
 
+export function applyEnableResultCacheSetting(value) {
+    const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.enableResultCache);
+    const changed = state.enableResultCache !== next;
+    const wasEnabled = state.enableResultCache;
+    state.enableResultCache = next;
+
+    if (changed && wasEnabled && !next) {
+        clearResultCache();
+    }
+
+    return changed;
+}
+
 export function applyReverseCardExtendDirectionSetting(value) {
     const next = normalizeBooleanSetting(value, APP_CONFIG.defaults.reverseCardExtendDirection);
     const changed = state.reverseCardExtendDirection !== next;
@@ -667,6 +754,7 @@ export function setupSettingsCommandListener() {
         const applyIf = (key, applyFn, parseResult) =>
             hasKey(key) ? applyFn(parseResult) : false;
 
+        const wasFirstCommandBatch = !state.settingsReceivedFromCommand;
         state.settingsReceivedFromCommand = true;
         const wsEndpointChanged = applyIf("wsEndpoint", applyWsEndpointSetting, parseWsEndpointValue(payload));
         const contentBarChanged = applyIf("contentBar", applyContentBarSetting, parseContentBarValue(payload));
@@ -689,9 +777,16 @@ export function setupSettingsCommandListener() {
         const cardRadiusChanged = applyIf("cardRadius", applyCardRadiusSetting, parseCardRadiusValue(payload));
         const cardBgBlurChanged = applyIf("cardBgBlur", applyCardBgBlurSetting, parseCardBgBlurValue(payload));
         const enableUpdateCheckChanged = applyIf("enableUpdateCheck", applyEnableUpdateCheckSetting, parseEnableUpdateCheckValue(payload));
+        const resultCacheChanged = applyIf("enableResultCache", applyEnableResultCacheSetting, parseEnableResultCacheValue(payload));
         const reverseCardDirectionChanged = applyIf("reverseCardExtendDirection", applyReverseCardExtendDirectionSetting, parseReverseCardExtendDirectionValue(payload));
         const osuFontChanged = applyIf("useOsuFont", applyUseOsuFontSetting, parseUseOsuFontValue(payload));
         const svChanged = applyIf("useSvDetection", applyUseSvDetectionSetting, parseSvDetectionValue(payload));
+        const forceSunnyWindowChanged = applyIf("forceSunnyWindow", applyForceSunnyWindowSetting, parseForceSunnyWindowValue(payload));
+        const enableLNDifficultyChanged = applyIf("enableLNDifficulty", applyEnableLNDifficultySetting, parseEnableLNDifficultyValue(payload));
+        const enableAnalyzeLNChanged = applyIf("enableAnalyzeLN", applyEnableAnalyzeLNSetting, parseEnableAnalyzeLNValue(payload));
+        const enableAlwaysShowLNDifficultyChanged = applyIf("enableAlwaysShowLNDifficulty", applyEnableAlwaysShowLNDifficultySetting, parseEnableAlwaysShowLNDifficultyValue(payload));
+        const display6kLevelChanged = applyIf("display6kLevel", applyDisplay6kLevelSetting, parseDisplay6kLevelValue(payload));
+        const extendedEstimationRangeChanged = applyIf("extendedEstimationRange", applyExtendedEstimationRangeSetting, parseExtendedEstimationRangeValue(payload));
         const osuThemeChanged = applyIf("enableOsuTheme", applyEnableOsuThemeSetting, parseEnableOsuThemeValue(payload));
         const floatingTrianglesChanged = applyIf("enableFloatingTriangles", applyEnableFloatingTrianglesSetting, parseEnableFloatingTrianglesValue(payload));
         const coverArtChanged = applyIf("enableCoverArt", applyEnableCoverArtSetting, parseEnableCoverArtValue(payload));
@@ -704,7 +799,11 @@ export function setupSettingsCommandListener() {
             refreshAutoDisplayProfile();
         }
 
+        // Preset is applied last so the snapshot wins over the raw payload.
+        const presetChanged = applyIf("preset", applyPresetSetting, parsePresetValue(payload));
+
         const changed = contentBarChanged
+            || presetChanged
             || wsEndpointChanged
             || srTextChanged
             || debugChanged
@@ -725,13 +824,20 @@ export function setupSettingsCommandListener() {
             || cardRadiusChanged
             || cardBgBlurChanged
             || enableUpdateCheckChanged
+            || resultCacheChanged
             || reverseCardDirectionChanged
             || osuFontChanged
             || osuThemeChanged
             || floatingTrianglesChanged
             || coverArtChanged
             || customColorChanged
-            || svChanged;
+            || svChanged
+            || forceSunnyWindowChanged
+            || enableLNDifficultyChanged
+            || enableAnalyzeLNChanged
+            || enableAlwaysShowLNDifficultyChanged
+            || display6kLevelChanged
+            || extendedEstimationRangeChanged;
 
         const recomputeNeeded = contentBarChanged
             || srTextChanged
@@ -746,7 +852,32 @@ export function setupSettingsCommandListener() {
             || rainbowChanged
             || vibroChanged
             || modeTagVisibilityChanged
-            || svChanged;
+            || svChanged
+            || forceSunnyWindowChanged
+            || enableLNDifficultyChanged
+            || enableAnalyzeLNChanged
+            || enableAlwaysShowLNDifficultyChanged
+            || display6kLevelChanged
+            || extendedEstimationRangeChanged;
+
+        // Invalidate cached results when any computation-affecting setting changed.
+        // wsEndpointChanged lives in `changed` only (not recomputeNeeded), so it is listed here explicitly.
+        if (estimatorChanged
+            || azusaSunnyReferenceHoChanged
+            || etternaVersionChanged
+            || companellaEtternaVersionChanged
+            || debugChanged
+            || svChanged
+            || vibroChanged
+            || wsEndpointChanged
+            || forceSunnyWindowChanged
+            || enableLNDifficultyChanged
+            || enableAnalyzeLNChanged
+            || enableAlwaysShowLNDifficultyChanged
+            || display6kLevelChanged
+            || extendedEstimationRangeChanged) {
+            clearResultCache();
+        }
 
         if (typeof state.initialSettingsResolver === "function") {
             const resolve = state.initialSettingsResolver;
@@ -758,6 +889,14 @@ export function setupSettingsCommandListener() {
             scheduleRecompute("settings changed", true);
         } else if (changed) {
             // Caption-only changes (like numeric display toggle) are applied immediately.
+        }
+
+        // Auto-save the current configuration into the active custom preset
+        // (or the fixed "Auto" preset) whenever the dashboard pushed a real
+        // settings change. Skipped for the initial settings batch and when
+        // the only change was the preset picker itself.
+        if (changed && !presetChanged && !wasFirstCommandBatch) {
+            autoSaveCurrentPreset();
         }
     });
 
@@ -825,6 +964,7 @@ export async function loadSettings() {
         applyCardRadiusSetting(parseCardRadiusValue(source));
         applyCardBgBlurSetting(parseCardBgBlurValue(source));
         applyEnableUpdateCheckSetting(parseEnableUpdateCheckValue(source));
+        applyEnableResultCacheSetting(parseEnableResultCacheValue(source));
         applyReverseCardExtendDirectionSetting(parseReverseCardExtendDirectionValue(source));
         applyUseOsuFontSetting(parseUseOsuFontValue(source));
         applyEnableOsuThemeSetting(parseEnableOsuThemeValue(source));
@@ -832,6 +972,14 @@ export async function loadSettings() {
         applyEnableCoverArtSetting(parseEnableCoverArtValue(source));
         applyCustomBackgroundColorSetting(parseCustomBackgroundColorValue(source));
         applyUseSvDetectionSetting(parseSvDetectionValue(source));
+        applyForceSunnyWindowSetting(parseForceSunnyWindowValue(source));
+        applyEnableLNDifficultySetting(parseEnableLNDifficultyValue(source));
+        applyEnableAnalyzeLNSetting(parseEnableAnalyzeLNValue(source));
+        applyEnableAlwaysShowLNDifficultySetting(parseEnableAlwaysShowLNDifficultyValue(source));
+        applyDisplay6kLevelSetting(parseDisplay6kLevelValue(source));
+        applyExtendedEstimationRangeSetting(parseExtendedEstimationRangeValue(source));
+        // Preset applied last so its snapshot wins over every key above.
+        applyPresetSetting(parsePresetValue(source));
     }
 
     // Apply file settings as baseline immediately
@@ -841,6 +989,7 @@ export async function loadSettings() {
         // File unavailable — apply config defaults as fallback
         applySettingsFrom({
             wsEndpoint: APP_CONFIG.defaults.wsEndpoint || APP_CONFIG.socketHost,
+            preset: APP_CONFIG.defaults.preset,
             contentBar: APP_CONFIG.defaults.contentBar,
             srText: APP_CONFIG.defaults.srText,
             debugUseAmount: APP_CONFIG.defaults.debugUseAmount,
@@ -861,6 +1010,7 @@ export async function loadSettings() {
             cardRadius: APP_CONFIG.defaults.cardRadius,
             cardBgBlur: APP_CONFIG.defaults.cardBgBlur,
             enableUpdateCheck: APP_CONFIG.defaults.enableUpdateCheck,
+            enableResultCache: APP_CONFIG.defaults.enableResultCache,
             reverseCardExtendDirection: APP_CONFIG.defaults.reverseCardExtendDirection,
             useOsuFont: APP_CONFIG.defaults.useOsuFont,
             enableOsuTheme: APP_CONFIG.defaults.enableOsuTheme,
@@ -868,6 +1018,12 @@ export async function loadSettings() {
             enableCoverArt: APP_CONFIG.defaults.enableCoverArt,
             customBackgroundColor: APP_CONFIG.defaults.customBackgroundColor,
             useSvDetection: APP_CONFIG.defaults.useSvDetection,
+            forceSunnyWindow: APP_CONFIG.defaults.forceSunnyWindow,
+            enableLNDifficulty: APP_CONFIG.defaults.enableLNDifficulty,
+            enableAnalyzeLN: APP_CONFIG.defaults.enableAnalyzeLN,
+            enableAlwaysShowLNDifficulty: APP_CONFIG.defaults.enableAlwaysShowLNDifficulty,
+            display6kLevel: APP_CONFIG.defaults.display6kLevel,
+            extendedEstimationRange: APP_CONFIG.defaults.extendedEstimationRange,
         });
     }
 
