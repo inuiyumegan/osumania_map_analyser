@@ -60,15 +60,11 @@ const ACTIVE_PRESET_KEY = "mma.presets.active.v1";
 // System-managed container that follows manual settings changes when no custom
 // preset is anchored. It is NOT an applicable snapshot — selecting "Auto" only
 // marks "keep following my manual changes". Reserved name.
-const AUTO_SAVE_PRESET_NAME = "Auto";
+const AUTO_SAVE_PRESET_NAME = "Last Saved Preset";
 // Default anchor slots, created automatically on first load. They behave like
 // any other custom preset (rename/delete allowed); re-creation is skipped once
 // present. Picking them in the dashboard dropdown materializes them on demand.
 const DEFAULT_SLOT_NAMES = ["Custom 1", "Custom 2", "Custom 3"];
-// Defensive cap for distinct custom presets (the "Auto" container does not
-// count towards it). Saving always overwrites an existing preset of the same
-// name, so this is only reachable when creating many differently named presets.
-const MAX_CUSTOM_PRESETS = 5;
 
 // Built-in presets (moved here so config.js stays untouched): each is a full
 // snapshot = APP_CONFIG.defaults + these overrides.
@@ -80,8 +76,49 @@ const PRESET_DEFS = [
         settings: {},
     },
     {
+        id: "mini",
+        name: "mini",
+        description: "Star rating only: no card body content, no top-right content, no map tag capsule.",
+        settings: {
+            contentBar: "None",
+            srText: "Pattern",
+            diffText: "Difficulty",
+            debugUseAmount: false,
+            estimatorAlgorithm: "Mixed",
+            azusaSunnyReferenceHo: true,
+            etternaVersion: "0.72.3",
+            companellaEtternaVersion: "0.74.0",
+            enablePauseDetection: true,
+            pauseDetectionThreshold: "500",
+            enableEtternaRainbowBars: false,
+            enableStatusMarquee: true,
+            VibroDetection: false,
+            showModeTagCapsule: true,
+            enableNumericDifficulty: true,
+            cardVisibility: "Always",
+            cardOpacity: "95%",
+            cardRadius: "Medium",
+            cardBgBlur: "4px",
+            enableUpdateCheck: true,
+            enableResultCache: true,
+            reverseCardExtendDirection: false,
+            useOsuFont: true,
+            enableOsuTheme: true,
+            enableFloatingTriangles: true,
+            enableCoverArt: true,
+            customBackgroundColor: "#000000",
+            useSvDetection: false,
+            forceSunnyWindow: true,
+            enableLNDifficulty: true,
+            enableAnalyzeLN: true,
+            enableAlwaysShowLNDifficulty: true,
+            display6kLevel: true,
+            extendedEstimationRange: false,
+        },
+    },
+    {
         id: "im-osu-main",
-        name: "im osu main",
+        name: "For osu Player",
         description: "Difficulty graph in the card body, pattern in the top-left capsule, estimated difficulty at top-right.",
         settings: {
             contentBar: "Graph",
@@ -121,28 +158,373 @@ const PRESET_DEFS = [
         },
     },
     {
+        id: "im-etterna-main",
+        name: "For Etterna Player",
+        description: "Etterna skillset bars in the card body with MSD on both capsules.",
+        settings: {
+            contentBar: "Etterna",
+            srText: "MSD",
+            diffText: "Difficulty",
+            debugUseAmount: false,
+            estimatorAlgorithm: "Mixed",
+            azusaSunnyReferenceHo: true,
+            etternaVersion: "0.72.3",
+            companellaEtternaVersion: "0.74.0",
+            enablePauseDetection: true,
+            pauseDetectionThreshold: "500",
+            enableEtternaRainbowBars: false,
+            enableStatusMarquee: true,
+            VibroDetection: false,
+            showModeTagCapsule: true,
+            enableNumericDifficulty: true,
+            cardVisibility: "Always",
+            cardOpacity: "95%",
+            cardRadius: "Medium",
+            cardBgBlur: "4px",
+            enableUpdateCheck: true,
+            enableResultCache: true,
+            reverseCardExtendDirection: false,
+            useOsuFont: true,
+            enableOsuTheme: true,
+            enableFloatingTriangles: true,
+            enableCoverArt: true,
+            customBackgroundColor: "#000000",
+            useSvDetection: false,
+            forceSunnyWindow: false,
+            enableLNDifficulty: false,
+            enableAnalyzeLN: false,
+            enableAlwaysShowLNDifficulty: true,
+            display6kLevel: true,
+            extendedEstimationRange: false,
+        },
+    },
+    {
+        id: "im-interlude-main",
+        name: "For Interlude Player",
+        description: "Pattern analysis, InterludeSR on the left, shown outside play.",
+        settings: {
+            contentBar: "Pattern",
+            srText: "InterludeSR",
+            diffText: "Difficulty",
+            debugUseAmount: false,
+            estimatorAlgorithm: "Mixed",
+            azusaSunnyReferenceHo: true,
+            etternaVersion: "0.72.3",
+            companellaEtternaVersion: "0.74.0",
+            enablePauseDetection: true,
+            pauseDetectionThreshold: "500",
+            enableEtternaRainbowBars: false,
+            enableStatusMarquee: true,
+            VibroDetection: false,
+            showModeTagCapsule: true,
+            enableNumericDifficulty: true,
+            cardVisibility: "OutsidePlay",
+            cardOpacity: "95%",
+            cardRadius: "Medium",
+            cardBgBlur: "4px",
+            enableUpdateCheck: true,
+            enableResultCache: true,
+            reverseCardExtendDirection: false,
+            useOsuFont: true,
+            enableOsuTheme: true,
+            enableFloatingTriangles: true,
+            enableCoverArt: true,
+            customBackgroundColor: "#000000",
+            useSvDetection: false,
+            forceSunnyWindow: true,
+            enableLNDifficulty: true,
+            enableAnalyzeLN: true,
+            enableAlwaysShowLNDifficulty: true,
+            display6kLevel: true,
+            extendedEstimationRange: false,
+        },
+    },
+    {
         id: "pattern-focus",
         name: "Pattern Focus",
         description: "Pattern analysis in the card body and the top-left capsule.",
-        settings: { contentBar: "Pattern", srText: "Pattern", diffText: "Difficulty" },
-    },
-    {
-        id: "etterna-focus",
-        name: "Etterna Focus",
-        description: "Etterna skillset bars in the card body with MSD on both capsules.",
-        settings: { contentBar: "Etterna", srText: "MSD", diffText: "MSD" },
+        settings: {
+            contentBar: "Pattern",
+            srText: "Pattern",
+            diffText: "Difficulty",
+            debugUseAmount: false,
+            estimatorAlgorithm: "Mixed",
+            azusaSunnyReferenceHo: true,
+            etternaVersion: "0.72.3",
+            companellaEtternaVersion: "0.74.0",
+            enablePauseDetection: true,
+            pauseDetectionThreshold: "500",
+            enableEtternaRainbowBars: false,
+            enableStatusMarquee: true,
+            VibroDetection: false,
+            showModeTagCapsule: true,
+            enableNumericDifficulty: true,
+            cardVisibility: "OutsidePlay",
+            cardOpacity: "95%",
+            cardRadius: "Medium",
+            cardBgBlur: "4px",
+            enableUpdateCheck: true,
+            enableResultCache: true,
+            reverseCardExtendDirection: false,
+            useOsuFont: true,
+            enableOsuTheme: true,
+            enableFloatingTriangles: true,
+            enableCoverArt: true,
+            customBackgroundColor: "#000000",
+            useSvDetection: false,
+            forceSunnyWindow: true,
+            enableLNDifficulty: true,
+            enableAnalyzeLN: true,
+            enableAlwaysShowLNDifficulty: true,
+            display6kLevel: true,
+            extendedEstimationRange: false,
+        },
     },
     {
         id: "full-overview",
         name: "Full Overview",
         description: "Pattern, Etterna and graph together, ReworkSR on the left, graph at top-right.",
-        settings: { contentBar: "Full", srText: "ReworkSR", diffText: "Graph" },
+        settings: {
+            contentBar: "Full",
+            srText: "Pattern",
+            diffText: "Difficulty",
+            debugUseAmount: false,
+            estimatorAlgorithm: "Mixed",
+            azusaSunnyReferenceHo: true,
+            etternaVersion: "0.72.3",
+            companellaEtternaVersion: "0.74.0",
+            enablePauseDetection: true,
+            pauseDetectionThreshold: "500",
+            enableEtternaRainbowBars: false,
+            enableStatusMarquee: true,
+            VibroDetection: false,
+            showModeTagCapsule: true,
+            enableNumericDifficulty: true,
+            cardVisibility: "Always",
+            cardOpacity: "95%",
+            cardRadius: "Medium",
+            cardBgBlur: "4px",
+            enableUpdateCheck: true,
+            enableResultCache: true,
+            reverseCardExtendDirection: true,
+            useOsuFont: true,
+            enableOsuTheme: true,
+            enableFloatingTriangles: true,
+            enableCoverArt: true,
+            customBackgroundColor: "#000000",
+            useSvDetection: false,
+            forceSunnyWindow: true,
+            enableLNDifficulty: true,
+            enableAnalyzeLN: true,
+            enableAlwaysShowLNDifficulty: true,
+            display6kLevel: true,
+            extendedEstimationRange: false,
+        },
     },
     {
-        id: "minimal",
-        name: "Minimal",
-        description: "Star rating only: no card body content, no top-right content, no map tag capsule.",
-        settings: { contentBar: "None", srText: "ReworkSR", diffText: "None", showModeTagCapsule: false },
+        id: "vibro-player",
+        name: "Vibro Player",
+        description: "Etterna skillset bars with MSD, graph at top-right.",
+        settings: {
+            contentBar: "Etterna",
+            srText: "MSD",
+            diffText: "Graph",
+            debugUseAmount: false,
+            estimatorAlgorithm: "Mixed",
+            azusaSunnyReferenceHo: true,
+            etternaVersion: "0.72.3",
+            companellaEtternaVersion: "0.74.0",
+            enablePauseDetection: true,
+            pauseDetectionThreshold: "500",
+            enableEtternaRainbowBars: false,
+            enableStatusMarquee: true,
+            VibroDetection: false,
+            showModeTagCapsule: true,
+            enableNumericDifficulty: true,
+            cardVisibility: "Always",
+            cardOpacity: "95%",
+            cardRadius: "Medium",
+            cardBgBlur: "4px",
+            enableUpdateCheck: true,
+            enableResultCache: true,
+            reverseCardExtendDirection: false,
+            useOsuFont: true,
+            enableOsuTheme: true,
+            enableFloatingTriangles: true,
+            enableCoverArt: true,
+            customBackgroundColor: "#000000",
+            useSvDetection: false,
+            forceSunnyWindow: false,
+            enableLNDifficulty: false,
+            enableAnalyzeLN: false,
+            enableAlwaysShowLNDifficulty: true,
+            display6kLevel: true,
+            extendedEstimationRange: false,
+        },
+    },
+    {
+        id: "jack-player",
+        name: "Jack Player",
+        description: "Difficulty graph, MSD on the left, estimated difficulty at top-right.",
+        settings: {
+            contentBar: "Graph",
+            srText: "MSD",
+            diffText: "Difficulty",
+            debugUseAmount: false,
+            estimatorAlgorithm: "Mixed",
+            azusaSunnyReferenceHo: true,
+            etternaVersion: "0.72.3",
+            companellaEtternaVersion: "0.74.0",
+            enablePauseDetection: true,
+            pauseDetectionThreshold: "500",
+            enableEtternaRainbowBars: false,
+            enableStatusMarquee: true,
+            VibroDetection: false,
+            showModeTagCapsule: true,
+            enableNumericDifficulty: true,
+            cardVisibility: "Always",
+            cardOpacity: "95%",
+            cardRadius: "Medium",
+            cardBgBlur: "4px",
+            enableUpdateCheck: true,
+            enableResultCache: true,
+            reverseCardExtendDirection: false,
+            useOsuFont: true,
+            enableOsuTheme: true,
+            enableFloatingTriangles: true,
+            enableCoverArt: true,
+            customBackgroundColor: "#000000",
+            useSvDetection: false,
+            forceSunnyWindow: true,
+            enableLNDifficulty: true,
+            enableAnalyzeLN: true,
+            enableAlwaysShowLNDifficulty: true,
+            display6kLevel: true,
+            extendedEstimationRange: false,
+        },
+    },
+    {
+        id: "the-limit-does-not-exist",
+        name: "The Limit Does Not Exist(Dear Reflec...)",
+        description: "Difficulty graph, MSD, Sunny estimation with extended range.",
+        settings: {
+            contentBar: "Graph",
+            srText: "MSD",
+            diffText: "Difficulty",
+            debugUseAmount: false,
+            estimatorAlgorithm: "Sunny",
+            azusaSunnyReferenceHo: true,
+            etternaVersion: "0.72.3",
+            companellaEtternaVersion: "0.74.0",
+            enablePauseDetection: true,
+            pauseDetectionThreshold: "500",
+            enableEtternaRainbowBars: false,
+            enableStatusMarquee: true,
+            VibroDetection: false,
+            showModeTagCapsule: true,
+            enableNumericDifficulty: true,
+            cardVisibility: "Always",
+            cardOpacity: "95%",
+            cardRadius: "Medium",
+            cardBgBlur: "4px",
+            enableUpdateCheck: true,
+            enableResultCache: true,
+            reverseCardExtendDirection: false,
+            useOsuFont: true,
+            enableOsuTheme: true,
+            enableFloatingTriangles: true,
+            enableCoverArt: true,
+            customBackgroundColor: "#000000",
+            useSvDetection: false,
+            forceSunnyWindow: true,
+            enableLNDifficulty: true,
+            enableAnalyzeLN: true,
+            enableAlwaysShowLNDifficulty: true,
+            display6kLevel: true,
+            extendedEstimationRange: true,
+        },
+    },
+    {
+        id: "daniel-like",
+        name: "Daniel-like",
+        description: "Difficulty graph, MSD, Daniel estimator.",
+        settings: {
+            contentBar: "Graph",
+            srText: "MSD",
+            diffText: "Difficulty",
+            debugUseAmount: false,
+            estimatorAlgorithm: "Daniel",
+            azusaSunnyReferenceHo: true,
+            etternaVersion: "0.72.3",
+            companellaEtternaVersion: "0.74.0",
+            enablePauseDetection: true,
+            pauseDetectionThreshold: "500",
+            enableEtternaRainbowBars: false,
+            enableStatusMarquee: true,
+            VibroDetection: false,
+            showModeTagCapsule: true,
+            enableNumericDifficulty: true,
+            cardVisibility: "Always",
+            cardOpacity: "95%",
+            cardRadius: "Medium",
+            cardBgBlur: "4px",
+            enableUpdateCheck: true,
+            enableResultCache: true,
+            reverseCardExtendDirection: false,
+            useOsuFont: true,
+            enableOsuTheme: true,
+            enableFloatingTriangles: true,
+            enableCoverArt: true,
+            customBackgroundColor: "#000000",
+            useSvDetection: false,
+            forceSunnyWindow: false,
+            enableLNDifficulty: true,
+            enableAnalyzeLN: false,
+            enableAlwaysShowLNDifficulty: true,
+            display6kLevel: true,
+            extendedEstimationRange: false,
+        },
+    },
+    {
+        id: "tyrcs-wild-dan",
+        name: "tyrcs wild dan for dressurf(WIP)",
+        description: "Difficulty graph, ReworkSR, Sunny estimation with extended range.",
+        settings: {
+            contentBar: "Graph",
+            srText: "ReworkSR",
+            diffText: "Difficulty",
+            debugUseAmount: false,
+            estimatorAlgorithm: "Sunny",
+            azusaSunnyReferenceHo: true,
+            etternaVersion: "0.72.3",
+            companellaEtternaVersion: "0.74.0",
+            enablePauseDetection: true,
+            pauseDetectionThreshold: "500",
+            enableEtternaRainbowBars: false,
+            enableStatusMarquee: true,
+            VibroDetection: false,
+            showModeTagCapsule: true,
+            enableNumericDifficulty: true,
+            cardVisibility: "Always",
+            cardOpacity: "95%",
+            cardRadius: "Medium",
+            cardBgBlur: "4px",
+            enableUpdateCheck: true,
+            enableResultCache: true,
+            reverseCardExtendDirection: false,
+            useOsuFont: true,
+            enableOsuTheme: true,
+            enableFloatingTriangles: true,
+            enableCoverArt: true,
+            customBackgroundColor: "#000000",
+            useSvDetection: false,
+            forceSunnyWindow: true,
+            enableLNDifficulty: true,
+            enableAnalyzeLN: true,
+            enableAlwaysShowLNDifficulty: true,
+            display6kLevel: true,
+            extendedEstimationRange: true,
+        },
     },
 ];
 
@@ -404,6 +786,16 @@ function applySnapshot(snapshot) {
 }
 
 function writeBackToTosu(presetName, snapshot) {
+    // Only the browser page (127.0.0.1) writes back. The in-game overlays load
+    // from localhost — a DIFFERENT origin that shares no localStorage with the
+    // browser page — so their write-back dedup records are invisible to the
+    // browser page. If they wrote back, a lagging overlay would misjudge a
+    // preset-apply echo as a manual edit, auto-save to "Last Saved Preset" /
+    // its anchored preset and jump every page's picker. Overlays stay read-only.
+    if (window.location.hostname !== "127.0.0.1") {
+        return;
+    }
+
     const folderName = typeof window.COUNTER_PATH === "string"
         ? window.COUNTER_PATH.trim()
         : "";
@@ -513,7 +905,7 @@ export function autoSaveCurrentPreset() {
         anchored.updatedAt = Date.now();
         persistCustomPresets();
         renderPresetManager();
-        if (shouldWriteBack(snapshot, anchored.name)) {
+        if (!recentlyWritten() && shouldWriteBack(snapshot, anchored.name)) {
             writeBackToTosu(anchored.name, snapshot);
             markWritten(snapshot, anchored.name);
         }
@@ -537,7 +929,38 @@ export function autoSaveCurrentPreset() {
     currentPreset = AUTO_SAVE_PRESET_NAME;
     persistActivePreset();
     renderPresetManager();
-    if (shouldWriteBack(snapshot, AUTO_SAVE_PRESET_NAME)) {
+    if (!recentlyWritten() && shouldWriteBack(snapshot, AUTO_SAVE_PRESET_NAME)) {
+        writeBackToTosu(AUTO_SAVE_PRESET_NAME, snapshot);
+        markWritten(snapshot, AUTO_SAVE_PRESET_NAME);
+    }
+    lastValues = { ...lastValues, ...snapshot, preset: AUTO_SAVE_PRESET_NAME };
+}
+
+/**
+ * Overwrites ONLY the "Last Saved Preset" container with the given snapshot
+ * and moves the picker there. Used when the picker moved to a built-in preset
+ * (or Auto) with a manual change — the edit belongs to Last Saved Preset,
+ * never to whatever custom preset happened to be anchored before.
+ */
+function saveToLastSavedPreset() {
+    const snapshot = { ...lastValues };
+    const auto = customPresets.find((preset) => preset.name === AUTO_SAVE_PRESET_NAME);
+    if (auto) {
+        auto.settings = snapshot;
+        auto.updatedAt = Date.now();
+    } else {
+        customPresets.push({
+            id: `auto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+            name: AUTO_SAVE_PRESET_NAME,
+            settings: snapshot,
+            createdAt: Date.now(),
+        });
+    }
+    persistCustomPresets();
+    currentPreset = AUTO_SAVE_PRESET_NAME;
+    persistActivePreset();
+    renderPresetManager();
+    if (!recentlyWritten() && shouldWriteBack(snapshot, AUTO_SAVE_PRESET_NAME)) {
         writeBackToTosu(AUTO_SAVE_PRESET_NAME, snapshot);
         markWritten(snapshot, AUTO_SAVE_PRESET_NAME);
     }
@@ -569,11 +992,8 @@ export function createCustomPreset(name, snapshot) {
     }
 
     // The "Auto" container does not count towards the user preset cap.
-    const userPresetCount = customPresets.filter((preset) => preset.name !== AUTO_SAVE_PRESET_NAME).length;
-    if (userPresetCount >= MAX_CUSTOM_PRESETS) {
-        return null;
-    }
-
+    // No hard limit: presets live in localStorage and are small, so users can
+    // create as many as they want (browser storage is the only ceiling).
     const preset = {
         id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
         name: cleanName,
@@ -613,6 +1033,10 @@ export function renameCustomPreset(id, newName) {
 export function deleteCustomPreset(id) {
     const index = customPresets.findIndex((item) => item.id === id);
     if (index === -1) {
+        return false;
+    }
+    // Fixed anchor slots cannot be deleted.
+    if (DEFAULT_SLOT_NAMES.includes(customPresets[index].name)) {
         return false;
     }
     customPresets.splice(index, 1);
@@ -706,26 +1130,29 @@ function applyPayloadToState() {
  */
 const LAST_WRITTEN_KEY = "mma.presets.lastWritten.v1";
 const WRITE_BACK_THROTTLE_MS = 1500;
+const LAST_WRITTEN_DEPTH = 3;
 
 function readLastWritten() {
     try {
         const raw = window.localStorage.getItem(LAST_WRITTEN_KEY);
-        return raw ? JSON.parse(raw) : null;
+        if (!raw) {
+            return null;
+        }
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+            return parsed;
+        }
+        // Legacy single-record format.
+        return [parsed];
     } catch {
         return null;
     }
 }
 
 function shouldWriteBack(snapshot, presetName) {
-    const last = readLastWritten();
-    if (!last) {
-        return true;
-    }
-    // Throttle: if this preset was written very recently (by any page), skip.
-    if (last.presetName === presetName && Date.now() - last.t < WRITE_BACK_THROTTLE_MS) {
-        return false;
-    }
-    if (last.presetName !== presetName) {
+    const list = readLastWritten();
+    const last = list && list[0];
+    if (!last || last.presetName !== presetName) {
         return true;
     }
     for (const key of Object.keys(PRESET_APPLIERS)) {
@@ -736,12 +1163,30 @@ function shouldWriteBack(snapshot, presetName) {
     return false;
 }
 
+/**
+ * True when ANY preset was written back very recently (by any page). Used to
+ * throttle AUTO-SAVE write-backs only: a second page whose snapshot lags can
+ * misjudge a preset-apply echo as a manual edit and write back "Last Saved
+ * Preset", jumping every open page's picker. 1.5s is far shorter than real
+ * user interactions, so legit auto-saves pass. Explicit writes (preset apply,
+ * user edits) are NOT throttled — skipping them would leave tosu's values.json
+ * stale and cause exactly the "picker jumps back" bug.
+ */
+function recentlyWritten() {
+    const list = readLastWritten();
+    return Boolean(list && list.some((r) => Date.now() - r.t < WRITE_BACK_THROTTLE_MS));
+}
+
 function markWritten(snapshot, presetName) {
-    const record = { presetName, snapshot: { ...snapshot }, t: Date.now() };
+    const list = readLastWritten() || [];
+    list.unshift({ presetName, snapshot: { ...snapshot }, t: Date.now() });
+    if (list.length > LAST_WRITTEN_DEPTH) {
+        list.length = LAST_WRITTEN_DEPTH;
+    }
     try {
-        window.localStorage.setItem(LAST_WRITTEN_KEY, JSON.stringify(record));
+        window.localStorage.setItem(LAST_WRITTEN_KEY, JSON.stringify(list));
     } catch {
-        // Storage failure only costs cross-page dedup; keep going.
+        // Storage failure only costs us cross-page dedup; keep going.
     }
 }
 
@@ -789,16 +1234,37 @@ function handleSettingsPacket(packet) {
     // True when the user actually changed settings in the dashboard (the
     // broadcast differs from the page's last known snapshot). Used to decide
     // between "use this preset" (no change) and "overwrite with my changes".
+    // wsEndpoint is excluded: tosu always includes it in every broadcast and
+    // it is not part of preset snapshots, so it would otherwise produce a
+    // false "manual change" on every preset write-back echo.
     const hasManualChange = Object.keys(PRESET_APPLIERS)
+        .filter((key) => key !== "wsEndpoint")
         .some((key) => hasKeyChanged(prev, lastValues, key));
 
-    if (presetValue && presetValue !== currentPreset) {
+    // Echo broadcast: the payload matches one of the recent write-backs (by
+    // this page or another). A delayed echo of an earlier Apply can arrive
+    // AFTER the user applied a different preset — without this guard it would
+    // be treated as "switch back to that preset" and jump the picker. The
+    // write-back history is a short queue, because the latest entry may belong
+    // to a different preset by the time the delayed echo arrives.
+    // wsEndpoint is excluded (it appears in every broadcast but never in
+    // snapshots); keys absent from the written snapshot are ignored.
+    const lastWrittenNow = readLastWritten();
+    const isWriteBackEcho = Boolean(lastWrittenNow) && lastWrittenNow.some((record) =>
+        record.presetName === presetValue
+        && Object.keys(PRESET_APPLIERS)
+            .filter((key) => key !== "wsEndpoint")
+            .every((key) =>
+                !(key in record.snapshot) || record.snapshot[key] === lastValues[key]));
+
+    if (presetValue && presetValue !== currentPreset && !isWriteBackEcho) {
         // The preset picker moved to a different preset.
         if (presetValue === AUTO_SAVE_PRESET_NAME) {
             if (hasManualChange) {
-                // User edited settings then picked Auto: overwrite Auto.
+                // User edited settings then picked Auto: overwrite Auto
+                // (never the currently anchored custom preset).
                 applyPayloadToState();
-                autoSaveCurrentPreset();
+                saveToLastSavedPreset();
             } else {
                 // Just switched the picker to Auto: follow mode, no overwrite.
                 currentPreset = AUTO_SAVE_PRESET_NAME;
@@ -828,7 +1294,7 @@ function handleSettingsPacket(packet) {
                 currentPreset = presetValue;
                 persistActivePreset();
                 renderPresetManager();
-                if (shouldWriteBack(snapshot, presetValue)) {
+                if (!recentlyWritten() && shouldWriteBack(snapshot, presetValue)) {
                     writeBackToTosu(presetValue, snapshot);
                     markWritten(snapshot, presetValue);
                 }
@@ -848,8 +1314,13 @@ function handleSettingsPacket(packet) {
         if (hasManualChange) {
             // User edited settings with a built-in preset selected: the edits
             // become the new Auto preset and the picker moves to Auto.
+            // Deliberately NOT autoSaveCurrentPreset(): that would also update
+            // the currently anchored custom preset (e.g. a lingering Custom 3)
+            // with the broadcast payload and keep its anchor — jumping the
+            // picker back to it. A picker change to a built-in preset always
+            // means "edits go to Last Saved Preset".
             applyPayloadToState();
-            autoSaveCurrentPreset();
+            saveToLastSavedPreset();
         } else {
             // No edits: "use" the built-in preset (apply its content).
             if (!applyPresetByName(presetValue)) {
@@ -863,7 +1334,8 @@ function handleSettingsPacket(packet) {
 
     // The picker stayed on the same preset: any change is an edit of whatever
     // is selected (Auto, a custom preset or a built-in one) -> auto-save.
-    if (hasManualChange) {
+    // Write-back echoes never count as edits.
+    if (hasManualChange && !isWriteBackEcho) {
         applyPayloadToState();
         autoSaveCurrentPreset();
     }
@@ -963,13 +1435,7 @@ function ensureManagerDom() {
         const existed = customPresets.some((preset) => preset.name === cleanName);
         const preset = createCustomPreset(cleanName, captureCurrentSettings());
         if (!preset) {
-            if (cleanName && cleanName !== "Custom" && cleanName !== AUTO_SAVE_PRESET_NAME
-                && !findBuiltinPresetByName(cleanName)
-                && customPresets.filter((item) => item.name !== AUTO_SAVE_PRESET_NAME).length >= MAX_CUSTOM_PRESETS) {
-                showManagerHint(`Preset limit reached (${MAX_CUSTOM_PRESETS}). Delete one first.`, true);
-            } else {
-                showManagerHint("Invalid preset name.", true);
-            }
+            showManagerHint("Invalid preset name.", true);
             return;
         }
         managerSaveInputEl.value = "";
@@ -1017,6 +1483,10 @@ function buildPresetRow(preset, { isSystem, active, actions = isSystem ? "apply"
     const descEl = document.createElement("div");
     descEl.className = "preset-item-desc";
     descEl.textContent = preset.description || "";
+    if (preset.description) {
+        // Native tooltip shows the full description when the row is narrow.
+        descEl.title = preset.description;
+    }
     info.appendChild(nameEl);
     info.appendChild(descEl);
 
@@ -1063,6 +1533,35 @@ function renderPresetManager() {
 
     const activeName = currentPreset;
 
+    // User presets come first.
+    const customSection = document.createElement("div");
+    customSection.className = "preset-section";
+    customSection.textContent = "My Presets";
+    managerBodyEl.appendChild(customSection);
+
+    const userPresets = customPresets
+        .filter((preset) => preset.name !== AUTO_SAVE_PRESET_NAME)
+        // Presets promoted to built-in system presets are no longer shown as
+        // user presets (the localStorage copy may still exist).
+        .filter((preset) => !findBuiltinPresetByName(preset.name));
+
+    if (userPresets.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "preset-empty";
+        empty.textContent = "No custom presets yet. Save your current settings below.";
+        managerBodyEl.appendChild(empty);
+    } else {
+        for (const preset of userPresets) {
+            managerBodyEl.appendChild(buildPresetRow(preset, {
+                isSystem: false,
+                active: activeName === preset.name,
+                // Fixed anchor slots (Custom 1/2/3) cannot be renamed/deleted;
+                // only user-created named presets get the full action set.
+                actions: DEFAULT_SLOT_NAMES.includes(preset.name) ? "apply" : "all",
+            }));
+        }
+    }
+
     // System presets.
     const systemSection = document.createElement("div");
     systemSection.className = "preset-section";
@@ -1076,50 +1575,15 @@ function renderPresetManager() {
         }));
     }
 
-    // User presets.
-    const customSection = document.createElement("div");
-    customSection.className = "preset-section";
-    customSection.textContent = "My Presets";
-    managerBodyEl.appendChild(customSection);
-
-    if (customPresets.length === 0) {
-        const empty = document.createElement("div");
-        empty.className = "preset-empty";
-        empty.textContent = "No custom presets yet. Save your current settings below.";
-        managerBodyEl.appendChild(empty);
-    } else {
-        // The system-managed "Auto" container always sits at the bottom of
-        // My Presets — user presets keep creation order.
-        const userPresets = customPresets.filter((preset) => preset.name !== AUTO_SAVE_PRESET_NAME);
-        const autoPreset = customPresets.find((preset) => preset.name === AUTO_SAVE_PRESET_NAME) || null;
-
-        for (const preset of userPresets) {
-            managerBodyEl.appendChild(buildPresetRow(preset, {
-                isSystem: false,
-                active: activeName === preset.name,
-            }));
-        }
-        if (autoPreset) {
-            managerBodyEl.appendChild(buildPresetRow(autoPreset, {
-                isSystem: false,
-                active: activeName === autoPreset.name,
-            }));
-        }
-    }
-
-    // The "Auto" container is shown in My Presets once it exists; until then
-    // keep a read-only entry at the very bottom so the picker's Auto option
-    // is still visible.
-    const autoExists = customPresets.some((preset) => preset.name === AUTO_SAVE_PRESET_NAME);
-    if (!autoExists) {
-        managerBodyEl.appendChild(buildPresetRow(
-            {
-                name: AUTO_SAVE_PRESET_NAME,
-                description: "Automatically keeps the latest manual configuration after you change settings.",
-            },
-            { isSystem: true, active: activeName === AUTO_SAVE_PRESET_NAME, actions: "none" },
-        ));
-    }
+    // The system-managed "Last Saved Preset" container lives in System too
+    // (read-only; it is maintained automatically).
+    managerBodyEl.appendChild(buildPresetRow(
+        {
+            name: AUTO_SAVE_PRESET_NAME,
+            description: "Automatically keeps the latest manual configuration after you change settings.",
+        },
+        { isSystem: true, active: activeName === AUTO_SAVE_PRESET_NAME, actions: "none" },
+    ));
 }
 
 function startRename(row) {
@@ -1128,6 +1592,10 @@ function startRename(row) {
         return;
     }
     const presetName = row.dataset.presetName;
+    // Fixed anchor slots cannot be renamed.
+    if (DEFAULT_SLOT_NAMES.includes(presetName)) {
+        return;
+    }
     const preset = customPresets.find((item) => item.name === presetName);
     if (!preset) {
         return;
@@ -1249,11 +1717,40 @@ function initPresets() {
     initialized = true;
 
     customPresets = loadCustomPresets();
+
+    // Migrate the pre-rename "Auto" container to the new display name.
+    const LEGACY_AUTO_NAME = "Auto";
+    if (!customPresets.some((preset) => preset.name === AUTO_SAVE_PRESET_NAME)) {
+        const legacy = customPresets.find((preset) => preset.name === LEGACY_AUTO_NAME);
+        if (legacy) {
+            legacy.name = AUTO_SAVE_PRESET_NAME;
+            persistCustomPresets();
+        }
+    }
+
     currentPreset = loadActivePreset();
+    if (currentPreset === LEGACY_AUTO_NAME) {
+        currentPreset = AUTO_SAVE_PRESET_NAME;
+        persistActivePreset();
+    }
     ensureDefaultCustomSlots();
 
     // Observe the tosu settings stream on our own commands connection.
     socket.commands(handleSettingsPacket);
+
+    // Cross-page sync: another page of this origin may add/rename/delete
+    // presets or change the active one; refresh our in-memory copy + UI.
+    window.addEventListener("storage", (event) => {
+        if (event.key === CUSTOM_PRESETS_KEY || event.key === ACTIVE_PRESET_KEY || event.key === LAST_WRITTEN_KEY) {
+            customPresets = loadCustomPresets();
+            if (event.key === ACTIVE_PRESET_KEY) {
+                currentPreset = loadActivePreset();
+            }
+            if (isEditMode() && managerBodyEl) {
+                renderPresetManager();
+            }
+        }
+    });
 
     if (isEditMode()) {
         ensureManagerDom();

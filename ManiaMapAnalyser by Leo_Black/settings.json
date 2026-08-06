@@ -2,19 +2,25 @@
 	{
 		"uniqueID": "preset",
 		"type": "options",
-		"title": "Preset",
-		"description": "Apply a preset that overwrites every setting below with a saved configuration. Choose Auto to keep following manual changes (they are saved into the Auto preset automatically). Custom presets can be created/renamed/deleted in the overlay page opened with ?edit=1 (see README).",
+		"title": "Preset（预设）",
+		"description": "Apply a preset that overwrites every setting below with a saved configuration. Choose Last Saved Preset to keep following manual changes (they are saved into the Last Saved Preset automatically). Custom presets can be created/renamed/deleted in the overlay page (http://localhost:24050/Your plugin folder name/index.html?edit=1).",
 		"options": [
 			"Default",
-			"im osu main",
+			"mini",
+			"For osu Player",
+			"For Etterna Player",
+			"For Interlude Player",
 			"Pattern Focus",
-			"Etterna Focus",
 			"Full Overview",
-			"Minimal",
+			"Vibro Player",
+			"Jack Player",
+			"The Limit Does Not Exist(Dear Reflec...)",
+			"Daniel-like",
+			"tyrcs wild dan for dressurf(WIP)",
 			"Custom 1",
 			"Custom 2",
 			"Custom 3",
-			"Auto"
+			"Last Saved Preset"
 		],
 		"value": "Default"
 	},

@@ -10,9 +10,10 @@
     top: 16px;
     right: 16px;
     z-index: 9999;
-    width: 320px;
+    width: 640px;
     max-width: calc(100vw - 32px);
     max-height: calc(100vh - 32px);
+    min-width: 280px;
     display: flex;
     flex-direction: column;
     background: rgba(12, 14, 22, 0.94);
@@ -24,6 +25,9 @@
     font-size: 13px;
     line-height: 1.45;
     overflow: hidden;
+    /* User can drag the left edge to resize the panel width. */
+    resize: horizontal;
+    overflow: auto;
 }
 
 .preset-manager[hidden] {
