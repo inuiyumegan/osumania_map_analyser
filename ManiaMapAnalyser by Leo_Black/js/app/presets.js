@@ -879,10 +879,6 @@ export function applyPresetByName(name) {
 }
 
 /** Returns the name of the currently active preset ("Default" when none). */
-export function getActivePreset() {
-    return currentPreset;
-}
-
 /**
  * Auto-save the current configuration after a dashboard settings change:
  *  - if a custom preset is anchored (currentPreset names one), update it and
@@ -913,27 +909,8 @@ export function autoSaveCurrentPreset() {
         return;
     }
 
-    const auto = customPresets.find((preset) => preset.name === AUTO_SAVE_PRESET_NAME);
-    if (auto) {
-        auto.settings = snapshot;
-        auto.updatedAt = Date.now();
-    } else {
-        customPresets.push({
-            id: `auto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-            name: AUTO_SAVE_PRESET_NAME,
-            settings: snapshot,
-            createdAt: Date.now(),
-        });
-    }
-    persistCustomPresets();
-    currentPreset = AUTO_SAVE_PRESET_NAME;
-    persistActivePreset();
-    renderPresetManager();
-    if (!recentlyWritten() && shouldWriteBack(snapshot, AUTO_SAVE_PRESET_NAME)) {
-        writeBackToTosu(AUTO_SAVE_PRESET_NAME, snapshot);
-        markWritten(snapshot, AUTO_SAVE_PRESET_NAME);
-    }
-    lastValues = { ...lastValues, ...snapshot, preset: AUTO_SAVE_PRESET_NAME };
+    // Not anchored to a custom preset: the change belongs to Last Saved Preset.
+    saveToLastSavedPreset();
 }
 
 /**
