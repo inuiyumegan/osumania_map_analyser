@@ -1,7 +1,6 @@
 import { calculate as calculateSunny } from "../rework/sunnyAlgorithm.js";
 import { calculateLN } from "../rework/sunnyWindowAlgorithm.js"
 import { estDiff2, normalizeReworkResult } from "./reworkEstimatorUtils.js";
-import { state } from "../app/appContext.js";
 
 function normalizeSunnyWindowResult(result) {
     if (result?.NoLN) return {star: 0, typePercentageData: result.typePercentageData};
@@ -23,7 +22,7 @@ export function runSunnyWindowEstimatorFromText(osuText, options = {}) {
     const rawResultLN = calculateLN(osuText, speedRate, odFlag, cvtFlag, { withGraph });
     const parsedLN = normalizeSunnyWindowResult(rawResultLN);
 
-    const shouldShowLN = state.enableAlwaysShowLNDifficulty || parsed.lnRatio > 0.15 || (parsedLN.star > 1.5 && parsedLN.star > parsed.star * 0.7) || parsed.lnPartsRatio > 0.3
+    const shouldShowLN = options.enableAlwaysShowLNDifficulty === true || parsed.lnRatio > 0.15 || (parsedLN.star > 1.5 && parsedLN.star > parsed.star * 0.7) || parsed.lnPartsRatio > 0.3
     const LNStar = shouldShowLN && parsedLN.star ? parsedLN.star : 0;
 
     return {
