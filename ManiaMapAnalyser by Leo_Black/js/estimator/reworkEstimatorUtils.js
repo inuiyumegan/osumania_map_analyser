@@ -101,7 +101,10 @@ export function estDiff(sr, lnRatio, columnCount, useExtended = false, enableAlw
     const rcDiff = intervalLookup(sr, rcTable, "Unknown RC difficulty");
     if (lnRatio < 0.15 && !enableAlwaysShowLNDifficulty) return rcDiff;
 
-    const lnTable = keys.LN[useExtended ? "extended" : "default"] ?? keys.LN.default;
+    // Some key counts (e.g. 10K) only ship an RC interval table — no LN table.
+    const lnTable = keys.LN?.[useExtended ? "extended" : "default"] ?? keys.LN?.default;
+    if (!lnTable) return rcDiff;
+
     const lnDiff = intervalLookup(sr, lnTable, "Unknown LN difficulty");
     return `${rcDiff} || ${lnDiff}`;
 }
@@ -114,7 +117,10 @@ export function estDiff2(sr, srLN, columnCount, useExtended = false) {
     const rcDiff = intervalLookup(sr, rcTable, "Unknown RC difficulty");
     if (srLN <= 0) return rcDiff;
 
-    const lnTable = keys.LN[useExtended ? "extended" : "default"] ?? keys.LN.default;
+    // Some key counts (e.g. 10K) only ship an RC interval table — no LN table.
+    const lnTable = keys.LN?.[useExtended ? "extended" : "default"] ?? keys.LN?.default;
+    if (!lnTable) return rcDiff;
+
     const lnDiff = intervalLookup(srLN, lnTable, "Unknown LN difficulty");
     return `${rcDiff} || ${lnDiff}`;
 }
