@@ -47,7 +47,144 @@ This repository is an entirely AI-crafted in-game overlay (ppcounter) for [tosu]
 
 ## Settings
 Note: It is recommended to start with the default settings and then adjust according to personal preference.
-See [docs/settings.md](docs/settings.md#english) for detailed settings instructions.
+- **Presets**: Apply a whole saved configuration with one click.
+    - **Preset** (the dropdown at the top of the settings page):
+        - Default: Initial state; the current default/manual configuration is in use.
+        - Auto: Follow mode. **As soon as you change any setting and save, the preset picker automatically moves to Auto** and your whole configuration is saved into the "Auto" preset (your latest manual configuration — you can always switch back to it).
+        - im osu main: Difficulty graph in the card body, pattern in the top-left capsule, estimated difficulty at top-right.
+        - Pattern Focus: Pattern analysis in the card body and the top-left capsule, estimated difficulty at top-right.
+        - Etterna Focus: Etterna skillset bars in the card body with MSD on both capsules.
+        - Full Overview: Everything at once (Full body), ReworkSR on the left, graph at top-right.
+        - Minimal: Star rating only — hides the card body, the top-right content and the map tag capsule.
+        - Custom 1 / Custom 2 / Custom 3: three pre-provisioned custom slots, **initially identical to Default**. **Only after you select one of the Custom slots and then change + save settings does that slot get updated** (anchoring); without an anchor every change goes into Auto.
+        - Note: picking a built-in preset (Default / im osu main / ...) immediately overwrites **all** settings with the preset and saves them; afterwards any manual change automatically moves the picker to Auto.
+    - **Custom presets**: open the overlay page in your browser with the `?edit=1` parameter (e.g. `http://localhost:24050/<your plugin folder>/index.html?edit=1`) to show the preset manager panel at the top-right corner:
+        - **Save current**: save the current full configuration as a custom preset (same-name saves overwrite; up to 5 custom presets).
+        - **Apply** on any preset to switch to it immediately; **Rename** and **Delete** manage your custom presets.
+        - **Anchor rule**: first Apply a custom preset (or pick it in the dropdown); then changes made and saved in the settings page are saved into **that custom preset**. Without an anchored custom preset, every change is saved into the "Auto" preset instead.
+        - Custom presets are stored in the browser (localStorage); applying syncs the values back to tosu.
+    - Note: applying a preset overwrites **all** settings (modules, theme, functionality, network, etc.) and persists them into tosu's configuration; after picking a built-in preset, any manual change switches you back to Auto follow mode. OBS / in-game overlay output is unaffected — the manager panel only appears when the page is opened with `?edit=1`.
+- **Module Settings**:
+    - **Card Body Content**: Select what to display in the main body of the card.
+        - None: Displays nothing. Short card mode.
+        - Auto: Automatically selects Pattern or Etterna based on the LN ratio of the beatmap.
+        - Pattern: Displays pattern analysis.
+        - Etterna: Displays Etterna's 7 major skill set breakdowns.
+        - Graph: Displays the difficulty variation graph.
+        - Full: Displays full content including pattern analysis, difficulty graph, and Etterna scores. Not recommended for daily use — may feel crowded.
+        - Note: For non-4/6/7K beatmaps, body content automatically falls back to Pattern.
+    - **Top-left Capsule Text**: Select what to display in the top-left capsule.
+        - Auto: Automatically selects ReworkSR or MSD based on the LN ratio of the beatmap.
+        - ReworkSR: Displays [Sunny Rework](https://github.com/sunnyxxy/Star-Rating-Rebirth) star rating.
+        - MSD: Displays Etterna MSD. *Only compatible with 4/6/7K beatmaps.
+        - InterludeSR: Displays [Interlude](https://github.com/YAVSRG/YAVSRG) star rating.
+        - Pattern: Displays the overall pattern.
+    - **Top-right Content**: Select what to display in the top-right of the card.
+        - None: Displays nothing.
+        - Graph: Displays the difficulty variation graph.
+        - Difficulty: Displays the estimated difficulty.
+        - MSD: Displays Etterna MSD. *Only compatible with 4/6/7K beatmaps.
+        - InterludeSR: Displays Interlude star rating.
+        - ReworkSR: Displays Sunny Rework star rating.
+        - Pattern: Displays the overall pattern.
+    - **Map Tag Capsule**: Whether to display the beatmap tag capsule.
+        - Includes HB/RC/LN/Mix/SV tags.
+        - Automatically determined based on beatmap characteristics.
+- **Theme & Effects**:
+    - **osu!Lazer Card Theme**: Whether to enable the Lazer-style card theme.
+        - When enabled, the card adopts a design style similar to osu!lazer, and enables certain settings only available under the Lazer theme.
+    - **osu! Font**: Whether to use the bundled Torus font inside the card only.
+    - **Floating Triangles Animation**: Whether to enable the floating triangle animation effect on the card background.
+        - This option only takes effect when the Lazer Card Theme is enabled.
+    - **Cover Art Background**: Whether to use the beatmap's background image as the card background.
+        - This option only takes effect when the Lazer Card Theme is enabled.
+        - When enabled, the card's color theme will be extracted from the beatmap background, enhancing visual effects; when disabled, a solid color background is used — pairing with the Custom Background Color setting is recommended.
+    - **Custom Background Color**: Set a custom background color for the card.
+        - This option only takes effect when the Lazer Card Theme is enabled.
+        - Even when using the beatmap background as the card background, you can set a custom color via this option.
+        - Set to pure black (#000000) to disable this feature and sample colors from the beatmap background or use a deep black background.
+    - **Rainbow Bars**: Whether to enable rainbow bars under the Etterna display.
+        - It is recommended to disable this option when the Lazer Card Theme is enabled for a more unified visual style.
+    - **Metadata Marquee**: Whether to enable horizontal scrolling for beatmap metadata.
+    - **Numeric Difficulty**: Whether to display numerical difficulty values.
+        - When enabled, numerical difficulty will be shown after the "ESTIMATE DIFFICULTY" label under the RC estimation algorithm.
+    - **LN Star Rating**: Show LN Star Rating
+        - Shows LN Star Rating after the "ESTIMATE DIFFICULTY" label.
+        - This option is only effective when "Improve Sunny LN Estimation" is enabled; otherwise, it will display the original Rework star rating.
+    - **Reverse Card Extension**: Whether to reverse the card expansion direction.
+        - When enabled, the card stays anchored at the bottom and grows upward; when disabled, it expands downward by default.
+    - **Card Visibility**: Control when the card is shown.
+        - Available values: `DuringPlay` (show only while playing), `OutsidePlay` (show only when not playing), `Always` (always show). Defaults to `Always`.
+    - **Card Opacity**: Set the overall card opacity.
+        - Available values: 100% / 95% / 90% / 80% / 70%.
+    - **Content Background Blur**: Whether to enable background image blur for content sections.
+        - When enabled, the background behind the card's content areas will have a blur effect, enhancing readability and visual depth.
+    - **Card Radius**: Set the card corner roundness.
+        - Small / Medium / Large.
+- **Functional Settings**:
+    - **Pause Detection**: Whether to enable pause detection.
+        - Recommended: When enabled, pause positions will be displayed on the difficulty graph, and the pause count will be shown in the bottom-right corner of the card.
+    - **Enable Update Check**: Whether to enable version update checking.
+        - When enabled, it checks the GitHub latest release at most once per day by default.
+        - When switching from disabled to enabled, it immediately triggers one extra check.
+        - The star icon on the left side of the status bar is shown only when a newer version is available.
+    - **Result Cache**: Enable caching of analysis results.
+        - When enabled, revisiting an already analyzed map (or switching mods and back) shows results instantly without recomputing.
+        - This option only affects display speed, not the results themselves. Enabled by default.
+    - **Vibro Detection**: Whether to enable vibro detection.
+        - Recommended: When enabled, the plugin will detect if a beatmap is a vibro map and display it as "Vibro" in the estimated difficulty; otherwise, you will see an extremely inflated difficulty estimate.
+    - **SV Detection**: Whether to enable SV beatmap detection.
+        - When enabled, an SV tag will be displayed in the bottom-left corner when speed variation is detected.
+        - Note: If the Map Tag Capsule display is not enabled, the SV tag will not be shown.
+    - **Show 6K Constant Rating**: Whether to enable the 6K constant rating display.
+        - When enabled, for 6K beatmaps only, the top-left star capsule will be overridden with the constant rating and display an "LV" badge.
+        - Formula: `sunnySR × 200/81 + 7/6`, rounded to 2 decimal places.
+        - When enabled, the constant rating will force-override the top-left capsule content on 6K beatmaps, regardless of the Top-left Capsule Text setting.
+    - **Extended Estimation Range**: Whether to enable the extended estimation range.
+        - Not Recommended: When enabled, extended interval tables are used for difficulty estimation, significantly raising the estimation soft cap.
+        - Only effective with the Sunny estimator. Extended interval cover 4K RC, 4K LN, 7K RC; not extending 6K/7K LN.
+        - Note: Estimates change when enabled. The extended tiers are purely experimental and accuracy is not guaranteed.
+        - The data source for the extended tiers can be found [here](https://github.com/inuiyumegan/dan_piecewise#%E5%B7%A5%E4%BD%9C%E5%8E%9F%E7%90%86).
+    - **Pause Detection Threshold**: Set the minimum duration (ms) for a time freeze to be counted as a pause.
+        - A pause is only confirmed when the game time has been frozen for longer than this threshold.
+        - Default is 500ms. If game lag causes false positives, increase this value appropriately.
+    - **Improve Sunny LN Estimation**: Improve Sunny Algorithm's LN Estimation
+        - Removes rice parts and LN parts which LN% is too low, before Sunny Algorithm calculate Star Rate, making Sunny Algorithm more accurate on LN maps.
+        - Note: This option affects all features that use the Sunny algorithm.
+    - **Analyze LN Parts**: Analyze LN Parts by LN
+        - Display the percentage of beatmaps which are in LN/HB/Mix/RC parts, and show it in the bottom-left beatmap tag capsule.
+    - **Estimator Algorithm**: Choose the algorithm used for difficulty estimation.
+        - Mixed: (Recommended) A hybrid algorithm combining the four below, offering relatively higher accuracy. Automatically selects the algorithm best suited for the current beatmap.
+        - Azusa: A fusion algorithm oriented towards 4K RC, combining the algorithms below with targeted adjustments. Performs well in RC scenarios but is not suitable for LN-dominant beatmaps.
+        - Roxy: A 4K RC meta-structural estimator. It models the beatmap using structural analysis and then blends reference predictions from Azusa/Sunny/Daniel using a GBDT meta-model.
+        - Sunny: Maps directly to Dan star ratings using Suuny Rework. Compatible with LN and RC Dans for 4/6/7K.
+        - [Daniel](https://thebagelofman.github.io/Daniel/): Uses the Daniel algorithm for estimation, suitable for 4K Reform Alpha and above Dan difficulties.
+        - [Companella](https://github.com/Leinadix/companella): Uses the Companella algorithm for estimation, suitable for 4K Reform Delta+ and below Dan difficulties.
+    - **Global Etterna Version**: Select the Etterna MinaCalc version used for MSD and related calculations.
+        - Different versions of Etterna may yield different MSD results; you can choose your preferred version.
+        - The default value 0.72.3 is personally recommended.
+        - Changing this setting will affect all features that depend on Etterna calculations, except for the Companella estimation algorithm.
+        - 4K uses the selected version directly; 6K/7K prioritize 0.74.0 for stability.
+        - If the current version is unavailable or does not support the current key count, it will automatically fall back to an available version.
+    - **Companella Etterna Version**: Select the Etterna MinaCalc version used exclusively for the Companella estimation algorithm.
+        - This setting only affects the Companella algorithm's calculations; other features will continue to use the version set in Global Etterna Version.
+        - The default value is 0.74.0. It is recommended to keep this setting at 0.74.0, as Companella was developed and calibrated based on Etterna 0.74.0's MinaCalc.
+        - You can switch to other versions to observe their performance with the Companella algorithm, but please be aware that results may be inaccurate.
+- **Network Configuration**:
+    - **WebSocket Endpoint**: Configure the address and port of the WebSocket server.
+        - Ensure this address and port match those configured in tosu, so it can receive data from tosu.
+        - The same host:port is also used to construct the beatmap file request URL: `http://{host:port}/files/beatmap/file`.
+        - Adjusting this setting allows you to use the plugin on other devices on the same local network, such as displaying analysis results on a mobile phone or tablet.
+        - The default value is `localhost:24050`.
+- **Debug Settings**:
+    - **Use Amount For Category**: Whether to enable pattern classification logic based on the beatmap's Cluster Amount.
+        - When enabled, pattern classification will be based on the number of objects in the beatmap, which **may** more accurately identify certain beatmaps.
+    - **Azusa Sunny Reference Force HO**
+        - When enabled, the Azusa algorithm will be forced to treat the beatmap as a pure RC (HO) map.
+        - It is enabled by default; please do not disable it casually.
+    - **Always Show LN Difficulty**
+        - When enabled, always show LN Difficulty. Default is disabled.
+        - This option only takes effect when "Improve Sunny LN Estimation" is enabled, or it may misjudge LN difficulty for non-LN maps.
 
 ## Roxy Algorithm Explanation
 Roxy is a 4K RC meta-structural estimator. Its core consists of two layers: the first layer performs structural analysis on the beatmap across 7 aspects, producing structured numerical difficulty; the second layer blends reference predictions from Azusa/Sunny/Daniel using a GBDT (Gradient Boosted Decision Tree) meta-model to output the final difficulty.
