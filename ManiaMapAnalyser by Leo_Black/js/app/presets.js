@@ -1,4 +1,20 @@
-import { APP_CONFIG, state } from "./appContext.js";
+/**
+ * Preset system — fully self-contained module.
+ *
+ * Design goals (minimal footprint on the original plugin):
+ *  - No changes to settings.js / appContext.js / config.js / main.js /
+ *    index.html / styles. The ONLY repo change besides this file is the
+ *    "preset" option added to settings.json.
+ *  - Opens its own /websocket/commands connection (WebSocketManager supports
+ *    multiple connections) to observe the tosu settings stream, detects
+ *    preset-picker changes and manual settings changes by diffing snapshots,
+ *    applies presets through the existing apply* functions and syncs results
+ *    back to tosu via the settings API.
+ *  - Creates its manager UI (and stylesheet link) dynamically; initializes
+ *    itself on module load.
+ */
+
+import { APP_CONFIG, socket, state } from "./appContext.js";
 import {
     applyAzusaSunnyReferenceHoSetting,
     applyCardBgBlurSetting,
@@ -40,22 +56,63 @@ import { clearResultCache } from "./resultCache.js";
 import { scheduleRecompute } from "./scheduler.js";
 
 const CUSTOM_PRESETS_KEY = "mma.presets.custom.v1";
-// Auto-saved preset name: a system-managed container that follows manual
-// settings changes when no custom preset is anchored. It is NOT an applicable
-// snapshot — selecting "Auto" in the preset picker only marks "keep following
-// my manual changes". Reserved name: users cannot create presets named "Auto".
-export const AUTO_SAVE_PRESET_NAME = "Auto";
-// Default anchor slots, created automatically on first load so users can pick
-// them in the dashboard dropdown right away. They behave like any other
-// custom preset (rename/delete allowed); re-creation is skipped once present.
+const ACTIVE_PRESET_KEY = "mma.presets.active.v1";
+// System-managed container that follows manual settings changes when no custom
+// preset is anchored. It is NOT an applicable snapshot — selecting "Auto" only
+// marks "keep following my manual changes". Reserved name.
+const AUTO_SAVE_PRESET_NAME = "Auto";
+// Default anchor slots, created automatically on first load. They behave like
+// any other custom preset (rename/delete allowed); re-creation is skipped once
+// present. Picking them in the dashboard dropdown materializes them on demand.
 const DEFAULT_SLOT_NAMES = ["Custom 1", "Custom 2", "Custom 3"];
 // Defensive cap for distinct custom presets (the "Auto" container does not
 // count towards it). Saving always overwrites an existing preset of the same
 // name, so this is only reachable when creating many differently named presets.
 const MAX_CUSTOM_PRESETS = 5;
 
-// Every schema key that a preset snapshot covers, mapped to its apply function.
-// Keep this list in sync with applySettingsFrom() in settings.js.
+// Built-in presets (moved here so config.js stays untouched): each is a full
+// snapshot = APP_CONFIG.defaults + these overrides.
+const PRESET_DEFS = [
+    {
+        id: "default",
+        name: "Default",
+        description: "Reset to the factory default configuration.",
+        settings: {},
+    },
+    {
+        id: "im-osu-main",
+        name: "im osu main",
+        description: "Difficulty graph in the card body, pattern in the top-left capsule, estimated difficulty at top-right.",
+        settings: { contentBar: "Graph", srText: "Pattern", diffText: "Difficulty" },
+    },
+    {
+        id: "pattern-focus",
+        name: "Pattern Focus",
+        description: "Pattern analysis in the card body and the top-left capsule.",
+        settings: { contentBar: "Pattern", srText: "Pattern", diffText: "Difficulty" },
+    },
+    {
+        id: "etterna-focus",
+        name: "Etterna Focus",
+        description: "Etterna skillset bars in the card body with MSD on both capsules.",
+        settings: { contentBar: "Etterna", srText: "MSD", diffText: "MSD" },
+    },
+    {
+        id: "full-overview",
+        name: "Full Overview",
+        description: "Pattern, Etterna and graph together, ReworkSR on the left, graph at top-right.",
+        settings: { contentBar: "Full", srText: "ReworkSR", diffText: "Graph" },
+    },
+    {
+        id: "minimal",
+        name: "Minimal",
+        description: "Star rating only: no card body content, no top-right content, no map tag capsule.",
+        settings: { contentBar: "None", srText: "ReworkSR", diffText: "None", showModeTagCapsule: false },
+    },
+];
+
+// Every schema key a preset snapshot covers, mapped to its apply function.
+// Keep in sync with applySettingsFrom() in settings.js.
 const PRESET_APPLIERS = {
     contentBar: applyContentBarSetting,
     srText: applySrTextSetting,
@@ -95,8 +152,6 @@ const PRESET_APPLIERS = {
 };
 
 // The same keys mapped to a getter that reads the CURRENT user value from state.
-// Values are captured in the exact format tosu stores (string options stay
-// strings; pauseDetectionThreshold is a number in state but a string in tosu).
 const PRESET_STATE_GETTERS = {
     contentBar: () => state.userContentBar,
     srText: () => state.userSrText,
@@ -156,10 +211,17 @@ const CACHE_KEYS = new Set([
 ]);
 
 let customPresets = [];
+let currentPreset = "Default";
+let lastValues = null;
+let initialized = false;
 let managerRootEl = null;
 let managerBodyEl = null;
 let managerSaveInputEl = null;
 let managerHintEl = null;
+
+// ---------------------------------------------------------------------------
+// Storage
+// ---------------------------------------------------------------------------
 
 function readStorageValue(key) {
     try {
@@ -202,6 +264,26 @@ function loadCustomPresets() {
 function persistCustomPresets() {
     writeStorageValue(CUSTOM_PRESETS_KEY, JSON.stringify(customPresets));
 }
+
+function persistActivePreset() {
+    writeStorageValue(ACTIVE_PRESET_KEY, currentPreset);
+}
+
+function loadActivePreset() {
+    try {
+        const raw = readStorageValue(ACTIVE_PRESET_KEY);
+        if (typeof raw === "string" && raw.trim()) {
+            return raw.trim();
+        }
+    } catch {
+        // ignore
+    }
+    return "Default";
+}
+
+// ---------------------------------------------------------------------------
+// Snapshot helpers
+// ---------------------------------------------------------------------------
 
 function buildDefaultSnapshot() {
     const defaults = APP_CONFIG.defaults;
@@ -247,20 +329,10 @@ function buildDefaultSnapshot() {
     };
 }
 
-function findBuiltinPresetByName(name) {
-    return (APP_CONFIG.presets || []).find((preset) => preset.name === name) || null;
-}
-
-function findPresetByName(name) {
-    return findBuiltinPresetByName(name)
-        || customPresets.find((preset) => preset.name === name)
-        || null;
-}
-
 function resolveSnapshot(preset) {
     // Built-in presets are "defaults + overrides"; custom presets already hold
-    // a full snapshot. Merging over defaults covers both (and heals missing keys
-    // from older custom presets).
+    // a full snapshot. Merging over defaults covers both (and heals missing
+    // keys from older custom presets).
     return { ...buildDefaultSnapshot(), ...preset.settings };
 }
 
@@ -306,8 +378,7 @@ function writeBackToTosu(presetName, snapshot) {
 
     // Same shape the dashboard POSTs: [{ uniqueID, value }, ...]. Only keys
     // present in the snapshot are sent (tosu merges, never replaces), so
-    // built-in presets leave wsEndpoint untouched. Headers and buttons are
-    // intentionally omitted.
+    // built-in presets leave wsEndpoint untouched.
     const values = Object.keys(snapshot).map((key) => ({
         uniqueID: key,
         value: snapshot[key],
@@ -323,26 +394,6 @@ function writeBackToTosu(presetName, snapshot) {
     });
 }
 
-/**
- * Applies a preset by name (built-in or user-defined) and syncs the resulting
- * configuration back to tosu. "Custom" or an unknown name is a no-op that
- * simply marks the current manual configuration as active.
- *
- * @returns {boolean} true when a known preset was applied.
- */
-export function applyPresetByName(name) {
-    const preset = findPresetByName(name);
-    if (!preset) {
-        return false;
-    }
-
-    const snapshot = resolveSnapshot(preset);
-    applySnapshot(snapshot);
-    writeBackToTosu(name, snapshot);
-    renderPresetManager();
-    return true;
-}
-
 /** Captures the currently applied user settings as a full snapshot. */
 export function captureCurrentSettings() {
     const snapshot = {};
@@ -351,6 +402,102 @@ export function captureCurrentSettings() {
     }
     return snapshot;
 }
+
+// ---------------------------------------------------------------------------
+// Preset lookup / application
+// ---------------------------------------------------------------------------
+
+function findBuiltinPresetByName(name) {
+    return PRESET_DEFS.find((preset) => preset.name === name) || null;
+}
+
+function findPresetByName(name) {
+    return findBuiltinPresetByName(name)
+        || customPresets.find((preset) => preset.name === name)
+        || null;
+}
+
+/**
+ * Applies a preset by name (built-in or user-defined) and syncs the resulting
+ * configuration back to tosu. Unknown names are lazily materialized ONLY for
+ * the default "Custom N" slots; any other unknown name is a no-op.
+ *
+ * @returns {boolean} true when a preset was applied.
+ */
+export function applyPresetByName(name) {
+    let preset = findPresetByName(name);
+    if (!preset && DEFAULT_SLOT_NAMES.includes(name)) {
+        createCustomPreset(name, captureCurrentSettings());
+        preset = findPresetByName(name);
+    }
+    if (!preset) {
+        return false;
+    }
+
+    const snapshot = resolveSnapshot(preset);
+    applySnapshot(snapshot);
+    currentPreset = name;
+    persistActivePreset();
+    writeBackToTosu(name, snapshot);
+    // Mirror the write-back into lastValues so the echo broadcast of the same
+    // values is not mistaken for a manual settings change (no auto-save loop).
+    // Spread the previous lastValues first so keys absent from built-in
+    // snapshots (e.g. wsEndpoint) keep their last known value.
+    lastValues = { ...lastValues, ...snapshot, preset: name };
+    renderPresetManager();
+    return true;
+}
+
+/** Returns the name of the currently active preset ("Default" when none). */
+export function getActivePreset() {
+    return currentPreset;
+}
+
+/**
+ * Auto-save the current configuration after a dashboard settings change:
+ *  - if a custom preset is anchored (currentPreset names one), update it and
+ *    keep the anchor;
+ *  - otherwise follow changes in the fixed "Auto" container and move the
+ *    dashboard preset picker to "Auto".
+ * Both paths sync the snapshot (plus the preset picker value) back to tosu.
+ */
+export function autoSaveCurrentPreset() {
+    const snapshot = captureCurrentSettings();
+
+    const anchored = customPresets.find((preset) => preset.name === currentPreset);
+    if (anchored) {
+        anchored.settings = snapshot;
+        anchored.updatedAt = Date.now();
+        persistCustomPresets();
+        renderPresetManager();
+        writeBackToTosu(anchored.name, snapshot);
+        lastValues = { ...lastValues, ...snapshot, preset: anchored.name };
+        return;
+    }
+
+    const auto = customPresets.find((preset) => preset.name === AUTO_SAVE_PRESET_NAME);
+    if (auto) {
+        auto.settings = snapshot;
+        auto.updatedAt = Date.now();
+    } else {
+        customPresets.push({
+            id: `auto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+            name: AUTO_SAVE_PRESET_NAME,
+            settings: snapshot,
+            createdAt: Date.now(),
+        });
+    }
+    persistCustomPresets();
+    currentPreset = AUTO_SAVE_PRESET_NAME;
+    persistActivePreset();
+    renderPresetManager();
+    writeBackToTosu(AUTO_SAVE_PRESET_NAME, snapshot);
+    lastValues = { ...lastValues, ...snapshot, preset: AUTO_SAVE_PRESET_NAME };
+}
+
+// ---------------------------------------------------------------------------
+// Custom preset CRUD
+// ---------------------------------------------------------------------------
 
 /** Creates or updates (same-name overwrite) a user preset from a snapshot. */
 export function createCustomPreset(name, snapshot) {
@@ -390,48 +537,10 @@ export function createCustomPreset(name, snapshot) {
     return preset;
 }
 
-/**
- * Auto-save the current configuration after a dashboard settings change:
- *  - if a custom preset is anchored (state.preset names one), update it and
- *    keep the anchor;
- *  - otherwise follow changes in the fixed "Auto" container and move the
- *    dashboard preset picker to "Auto".
- * Both paths sync the snapshot (plus the preset picker value) back to tosu.
- */
-export function autoSaveCurrentPreset() {
-    const snapshot = captureCurrentSettings();
-
-    const anchored = customPresets.find((preset) => preset.name === state.preset);
-    if (anchored) {
-        anchored.settings = snapshot;
-        anchored.updatedAt = Date.now();
-        persistCustomPresets();
-        renderPresetManager();
-        writeBackToTosu(anchored.name, snapshot);
-        return;
-    }
-
-    const auto = customPresets.find((preset) => preset.name === AUTO_SAVE_PRESET_NAME);
-    if (auto) {
-        auto.settings = snapshot;
-        auto.updatedAt = Date.now();
-    } else {
-        customPresets.push({
-            id: `auto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-            name: AUTO_SAVE_PRESET_NAME,
-            settings: snapshot,
-            createdAt: Date.now(),
-        });
-    }
-    persistCustomPresets();
-    renderPresetManager();
-    writeBackToTosu(AUTO_SAVE_PRESET_NAME, snapshot);
-}
-
 /** Renames a user preset by id. Returns true on success. */
 export function renameCustomPreset(id, newName) {
     const cleanName = String(newName || "").trim();
-    if (!cleanName || cleanName === "Custom") {
+    if (!cleanName || cleanName === "Custom" || cleanName === AUTO_SAVE_PRESET_NAME) {
         return false;
     }
     const preset = customPresets.find((item) => item.id === id);
@@ -463,8 +572,122 @@ export function deleteCustomPreset(id) {
     return true;
 }
 
+/** Ensures the default "Custom 1..N" anchor slots exist. */
+function ensureDefaultCustomSlots() {
+    const snapshot = captureCurrentSettings();
+    for (const name of DEFAULT_SLOT_NAMES) {
+        const existing = customPresets.some((preset) => preset.name === name);
+        if (!existing && createCustomPreset(name, snapshot) === null) {
+            break; // cap reached or name rejected — stop trying the rest
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
-// Preset manager UI (visible only when the page is opened with ?edit=1)
+// tosu settings stream (own /websocket/commands connection)
+// ---------------------------------------------------------------------------
+
+function extractSettingsPayload(packet) {
+    if (Array.isArray(packet)) {
+        return packet;
+    }
+    if (packet && typeof packet === "object" && packet.command === "getSettings") {
+        return packet.message;
+    }
+    return null;
+}
+
+function extractPresetValue(payload) {
+    if (Array.isArray(payload)) {
+        const item = payload.find((entry) => entry?.uniqueID === "preset");
+        return typeof item?.value === "string" && item.value.trim() ? item.value.trim() : null;
+    }
+    if (payload && typeof payload === "object") {
+        const value = payload.preset;
+        return typeof value === "string" && value.trim() ? value.trim() : null;
+    }
+    return null;
+}
+
+function snapshotOf(payload) {
+    if (Array.isArray(payload)) {
+        const out = {};
+        for (const entry of payload) {
+            if (entry && typeof entry.uniqueID === "string") {
+                out[entry.uniqueID] = entry.value;
+            }
+        }
+        return out;
+    }
+    return { ...(payload || {}) };
+}
+
+function hasKeyChanged(prev, next, key) {
+    return Object.prototype.hasOwnProperty.call(next, key)
+        && next[key] !== prev[key];
+}
+
+/**
+ * Settings stream handler:
+ *  - first batch: record baseline, restore/apply the stored preset picker;
+ *  - preset picker change: apply (or mark Auto);
+ *  - any other settings change: auto-save into the anchored custom preset or
+ *    the Auto container (write-back echoes the same values -> no loop).
+ */
+function handleSettingsPacket(packet) {
+    const payload = extractSettingsPayload(packet);
+    if (!payload) {
+        return;
+    }
+
+    const presetValue = extractPresetValue(payload);
+
+    if (lastValues === null) {
+        lastValues = snapshotOf(payload);
+        if (presetValue && presetValue !== currentPreset) {
+            if (presetValue === "Default" || !applyPresetByName(presetValue)) {
+                // "Custom" (or any unresolvable value) means "no preset": the
+                // current manual configuration stays, anchored to nothing.
+                currentPreset = "Default";
+                persistActivePreset();
+                renderPresetManager();
+            }
+        }
+        return;
+    }
+
+    const prev = lastValues;
+    lastValues = snapshotOf(payload);
+
+    if (presetValue && presetValue !== currentPreset) {
+        if (presetValue === AUTO_SAVE_PRESET_NAME) {
+            currentPreset = AUTO_SAVE_PRESET_NAME;
+            persistActivePreset();
+            renderPresetManager();
+            return;
+        }
+        if (!applyPresetByName(presetValue)) {
+            currentPreset = "Default";
+            persistActivePreset();
+            renderPresetManager();
+        }
+        return;
+    }
+
+    let anyChange = false;
+    for (const key of Object.keys(PRESET_APPLIERS)) {
+        if (hasKeyChanged(prev, lastValues, key)) {
+            anyChange = true;
+            break;
+        }
+    }
+    if (anyChange) {
+        autoSaveCurrentPreset();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Manager UI (created dynamically; visible only with ?edit=1)
 // ---------------------------------------------------------------------------
 
 function isEditMode() {
@@ -475,53 +698,111 @@ function isEditMode() {
     }
 }
 
+function injectStylesheet() {
+    if (document.getElementById("preset-manager-style")) {
+        return;
+    }
+    const link = document.createElement("link");
+    link.id = "preset-manager-style";
+    link.rel = "stylesheet";
+    link.href = "./styles/presets.css";
+    document.head.appendChild(link);
+}
+
 function ensureManagerDom() {
     if (managerRootEl) {
         return;
     }
-    managerRootEl = document.getElementById("preset-manager");
-    if (!managerRootEl) {
-        return;
-    }
-    managerBodyEl = document.getElementById("preset-manager-body");
-    managerSaveInputEl = document.getElementById("preset-save-name");
-    managerHintEl = document.getElementById("preset-manager-hint");
 
-    const closeBtn = document.getElementById("preset-manager-close");
-    if (closeBtn) {
-        closeBtn.addEventListener("click", () => {
-            managerRootEl.hidden = true;
-        });
-    }
+    injectStylesheet();
 
-    const saveBtn = document.getElementById("preset-save-btn");
-    if (saveBtn && managerSaveInputEl) {
-        const saveCurrent = () => {
-            const cleanName = String(managerSaveInputEl.value || "").trim();
-            const existed = customPresets.some((preset) => preset.name === cleanName);
-            const preset = createCustomPreset(cleanName, captureCurrentSettings());
-            if (!preset) {
-                if (cleanName && cleanName !== "Custom" && !findBuiltinPresetByName(cleanName)
-                    && customPresets.length >= MAX_CUSTOM_PRESETS) {
-                    showManagerHint(`Preset limit reached (${MAX_CUSTOM_PRESETS}). Delete one first.`, true);
-                } else {
-                    showManagerHint("Invalid preset name.", true);
-                }
-                return;
+    const root = document.createElement("aside");
+    root.id = "preset-manager";
+    root.className = "preset-manager";
+    root.hidden = true;
+
+    const header = document.createElement("div");
+    header.className = "preset-manager-header";
+    const title = document.createElement("span");
+    title.className = "preset-manager-title";
+    title.textContent = "Presets";
+    const closeBtn = document.createElement("button");
+    closeBtn.id = "preset-manager-close";
+    closeBtn.className = "preset-manager-close";
+    closeBtn.type = "button";
+    closeBtn.title = "Hide preset manager";
+    closeBtn.setAttribute("aria-label", "Hide preset manager");
+    closeBtn.textContent = "\u00d7";
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+
+    const body = document.createElement("div");
+    body.id = "preset-manager-body";
+    body.className = "preset-manager-body";
+
+    const hint = document.createElement("p");
+    hint.id = "preset-manager-hint";
+    hint.className = "preset-manager-hint";
+
+    const saveRow = document.createElement("div");
+    saveRow.className = "preset-manager-save";
+    const saveInput = document.createElement("input");
+    saveInput.id = "preset-save-name";
+    saveInput.className = "preset-save-name";
+    saveInput.type = "text";
+    saveInput.placeholder = "New preset name...";
+    saveInput.maxLength = 40;
+    const saveBtn = document.createElement("button");
+    saveBtn.id = "preset-save-btn";
+    saveBtn.className = "preset-btn preset-save-btn";
+    saveBtn.type = "button";
+    saveBtn.textContent = "Save current";
+    saveRow.appendChild(saveInput);
+    saveRow.appendChild(saveBtn);
+
+    root.appendChild(header);
+    root.appendChild(body);
+    root.appendChild(hint);
+    root.appendChild(saveRow);
+    document.body.appendChild(root);
+
+    managerRootEl = root;
+    managerBodyEl = body;
+    managerSaveInputEl = saveInput;
+    managerHintEl = hint;
+
+    closeBtn.addEventListener("click", () => {
+        root.hidden = true;
+    });
+
+    const saveCurrent = () => {
+        const cleanName = String(managerSaveInputEl.value || "").trim();
+        const existed = customPresets.some((preset) => preset.name === cleanName);
+        const preset = createCustomPreset(cleanName, captureCurrentSettings());
+        if (!preset) {
+            if (cleanName && cleanName !== "Custom" && cleanName !== AUTO_SAVE_PRESET_NAME
+                && !findBuiltinPresetByName(cleanName)
+                && customPresets.filter((item) => item.name !== AUTO_SAVE_PRESET_NAME).length >= MAX_CUSTOM_PRESETS) {
+                showManagerHint(`Preset limit reached (${MAX_CUSTOM_PRESETS}). Delete one first.`, true);
+            } else {
+                showManagerHint("Invalid preset name.", true);
             }
-            managerSaveInputEl.value = "";
-            showManagerHint(
-                existed ? `Preset "${preset.name}" updated.` : `Preset "${preset.name}" saved.`,
-                false,
-            );
-        };
-        saveBtn.addEventListener("click", saveCurrent);
-        managerSaveInputEl.addEventListener("keydown", (event) => {
-            if (event.key === "Enter") {
-                saveCurrent();
-            }
-        });
-    }
+            return;
+        }
+        managerSaveInputEl.value = "";
+        showManagerHint(
+            existed ? `Preset "${preset.name}" updated.` : `Preset "${preset.name}" saved.`,
+            false,
+        );
+    };
+    saveBtn.addEventListener("click", saveCurrent);
+    saveInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            saveCurrent();
+        }
+    });
+
+    root.addEventListener("click", handleManagerClick);
 }
 
 function showManagerHint(message, isError) {
@@ -530,12 +811,6 @@ function showManagerHint(message, isError) {
     }
     managerHintEl.textContent = message;
     managerHintEl.classList.toggle("error", Boolean(isError));
-}
-
-function clearManagerHint() {
-    if (managerHintEl) {
-        managerHintEl.textContent = "";
-    }
 }
 
 function buildPresetRow(preset, { isSystem, active, actions = isSystem ? "apply" : "all" }) {
@@ -603,7 +878,7 @@ function renderPresetManager() {
 
     managerBodyEl.textContent = "";
 
-    const activeName = state.preset;
+    const activeName = currentPreset;
 
     // System presets.
     const systemSection = document.createElement("div");
@@ -611,7 +886,7 @@ function renderPresetManager() {
     systemSection.textContent = "System";
     managerBodyEl.appendChild(systemSection);
 
-    for (const preset of APP_CONFIG.presets || []) {
+    for (const preset of PRESET_DEFS) {
         managerBodyEl.appendChild(buildPresetRow(preset, {
             isSystem: true,
             active: activeName === preset.name,
@@ -631,7 +906,7 @@ function renderPresetManager() {
         managerBodyEl.appendChild(empty);
     } else {
         // The system-managed "Auto" container always sits at the bottom of
-        // My Presets, above nothing — user presets keep creation order.
+        // My Presets — user presets keep creation order.
         const userPresets = customPresets.filter((preset) => preset.name !== AUTO_SAVE_PRESET_NAME);
         const autoPreset = customPresets.find((preset) => preset.name === AUTO_SAVE_PRESET_NAME) || null;
 
@@ -726,7 +1001,7 @@ function finishRename(row) {
         renderPresetManager();
         return;
     }
-    clearManagerHint();
+    showManagerHint("", false);
 }
 
 function handleManagerClick(event) {
@@ -742,11 +1017,9 @@ function handleManagerClick(event) {
     switch (actionBtn.dataset.action) {
         case "apply": {
             const name = row.dataset.presetName;
-            if (name === "Custom") {
-                // Persist the current manual configuration and clear the preset
-                // selection in tosu so the dashboard dropdown shows Custom.
-                writeBackToTosu("Custom", captureCurrentSettings());
-                showManagerHint("Custom configuration kept.", false);
+            if (name === AUTO_SAVE_PRESET_NAME) {
+                // No-op: Auto is a follow-mode marker, not an applicable snapshot.
+                showManagerHint("Auto keeps following your manual changes.", false);
                 return;
             }
             if (applyPresetByName(name)) {
@@ -782,52 +1055,30 @@ function handleManagerClick(event) {
     }
 }
 
-/**
- * Ensures the default "Custom 1..N" anchor slots exist (snapshot = current
- * configuration). Skipped for names already present; silently respects the
- * user preset cap so existing manual presets are never disturbed.
- */
-function ensureDefaultCustomSlots() {
-    const snapshot = captureCurrentSettings();
-    for (const name of DEFAULT_SLOT_NAMES) {
-        const existing = customPresets.some((preset) => preset.name === name);
-        if (!existing && createCustomPreset(name, snapshot) === null) {
-            break; // cap reached or name rejected — stop trying the rest
+// ---------------------------------------------------------------------------
+// Init (self-contained — no main.js wiring needed)
+// ---------------------------------------------------------------------------
+
+function initPresets() {
+    if (initialized) {
+        return;
+    }
+    initialized = true;
+
+    customPresets = loadCustomPresets();
+    currentPreset = loadActivePreset();
+    ensureDefaultCustomSlots();
+
+    // Observe the tosu settings stream on our own commands connection.
+    socket.commands(handleSettingsPacket);
+
+    if (isEditMode()) {
+        ensureManagerDom();
+        if (managerRootEl) {
+            managerRootEl.hidden = false;
+            renderPresetManager();
         }
     }
 }
 
-/**
- * Applies a preset by name, lazily materializing ONLY the default "Custom N"
- * slots picked in the dashboard dropdown. Any other unknown name (e.g. a
- * stale broadcast referencing a deleted preset) is NOT re-created — it falls
- * through to applyPresetByName, which reports false for unknown names.
- *
- * @returns {boolean} true when a preset was applied.
- */
-export function ensureAndApplyPresetByName(name) {
-    if (!findPresetByName(name) && DEFAULT_SLOT_NAMES.includes(name)) {
-        createCustomPreset(name, captureCurrentSettings());
-    }
-    return applyPresetByName(name);
-}
-
-/**
- * Initializes the preset module. Always loads custom presets and ensures the
- * default slots; the manager UI is rendered only when the page is opened with
- * ?edit=1.
- */
-export function initPresets() {
-    customPresets = loadCustomPresets();
-    ensureDefaultCustomSlots();
-    if (!isEditMode()) {
-        return;
-    }
-    ensureManagerDom();
-    if (!managerRootEl) {
-        return;
-    }
-    managerRootEl.hidden = false;
-    managerRootEl.addEventListener("click", handleManagerClick);
-    renderPresetManager();
-}
+initPresets();
