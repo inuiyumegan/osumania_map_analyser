@@ -1,6 +1,7 @@
 import { APP_CONFIG } from "../../config.js";
 import { runAzusaEstimatorFromText } from "../estimator/azusaEstimator.js";
 import { classifyCompanellaDifficulty } from "../estimator/companellaEstimator.js";
+import { runJackDanEstimatorFromText } from "../estimator/jackdanEstimator.js";
 import { runDanielEstimatorFromText } from "../estimator/danielEstimator.js";
 import {
     applyCompanellaToMixedResult,
@@ -230,6 +231,13 @@ const ALGORITHM_REGISTRY = Object.freeze([
         group: "Settings algorithms",
         note: "Async ONNX path; requires Etterna + Interlude inputs.",
         run: runCompanellaFromText,
+    },
+    {
+        id: "JackDan",
+        label: "JackDan",
+        group: "Settings algorithms",
+        note: "Jack/Chordjack dan from MSD Overall(0.72.3) + Interlude SR; async.",
+        run: (osuText, options) => runJackDanEstimatorFromText(osuText, options),
     },
     {
         id: "RoxyStructural",

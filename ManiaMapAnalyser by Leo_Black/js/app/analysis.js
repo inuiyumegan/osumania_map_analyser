@@ -8,6 +8,7 @@ import {
     runMixedEstimatorFromText,
 } from "../estimator/mixedEstimator.js";
 import { classifyCompanellaDifficulty } from "../estimator/companellaEstimator.js";
+import { computeJackDanDifficulty, JACKDAN_MSD_VERSION } from "../estimator/jackdanEstimator.js";
 import { calculateInterludeStar } from "../interlude/index.js";
 import { analyzePatternFromText } from "../patterns/service.js";
 import { OsuFileParser } from "../parser/osuFileParser.js";
@@ -295,12 +296,13 @@ export async function fetchBeatmapFile(reason) {
             || state.srText === "MSD"
             || state.diffText === "MSD"
             || state.vibroDetection
-            || (currentEstimatorAlgorithm() === "Companella" || currentEstimatorAlgorithm() === "Mixed"),
+            || (currentEstimatorAlgorithm() === "Companella" || currentEstimatorAlgorithm() === "Mixed" || currentEstimatorAlgorithm() === "JackDan"),
         graph: state.diffText === "Graph" || contentBarShows("Graph"),
         interlude: state.srText === "InterludeSR"
             || state.diffText === "InterludeSR"
             || currentEstimatorAlgorithm() === "Companella"
-            || currentEstimatorAlgorithm() === "Mixed",
+            || currentEstimatorAlgorithm() === "Mixed"
+            || currentEstimatorAlgorithm() === "JackDan",
     };
     const cacheKey = `${state.estimatorAlgorithm}|${state.lastBeatmapIdentity}|${state.modSignature}`;
     const isMetaDegraded = String(state.lastBeatmapIdentity || "").startsWith("meta:");
@@ -400,11 +402,13 @@ export async function fetchBeatmapFile(reason) {
         let typePercentageData = null;
         let pendingCompanellaEstimate = false;
         let pendingMixedCompanellaContext = null;
+        let pendingJackDanEstimate = false;
         let sixKConst = null;
 
         const estimatorAlgorithm = currentEstimatorAlgorithm();
         const estimatorNeedsCompanellaData = estimatorAlgorithm === "Companella"
-            || estimatorAlgorithm === "Mixed";
+            || estimatorAlgorithm === "Mixed"
+            || estimatorAlgorithm === "JackDan";
 
         const needVibroDetection = state.vibroDetection;
         const needPatternAnalysis = showsPattern
@@ -498,6 +502,14 @@ export async function fetchBeatmapFile(reason) {
                     nextNumericDifficulty = selectedRework.numericDifficulty;
                     nextNumericDifficultyHint = selectedRework.numericDifficultyHint;
                     pendingCompanellaEstimate = Number(selectedRework.columnCount) === 4;
+                } else if (estimatorAlgorithm === "JackDan") {
+                    // JackDan needs Etterna MSD + Interlude SR, which the analysis
+                    // pipeline computes below; resolve the dan here in post-processing.
+                    selectedRework = runSunnyEstimatorFromText(rawText, estimatorOptions);
+                    nextEstDiff = selectedRework.estDiff;
+                    nextNumericDifficulty = selectedRework.numericDifficulty;
+                    nextNumericDifficultyHint = selectedRework.numericDifficultyHint;
+                    pendingJackDanEstimate = Number(selectedRework.columnCount) === 4;
                 } else if (estimatorAlgorithm === "Mixed") {
                     selectedRework = runMixedEstimatorFromText(rawText, estimatorOptions);
                     nextEstDiff = selectedRework.estDiff;
@@ -738,6 +750,70 @@ export async function fetchBeatmapFile(reason) {
                 } catch (error) {
                     console.warn(`Companella estimate failed: ${error.message}`);
                 }
+            }
+
+            // JackDan：复用管线已算好的 Etterna MSD + Interlude SR，
+            // 模型特征固定用 0.72.3 MSD（Overall/Technical），Companella 输入
+            // 用其自身版本（默认 0.74.0）；与全局 Etterna 版本不同时单独重算。
+            if (pendingJackDanEstimate && !cached) {
+                let jackDanMsdValues = ettResult?.values;
+                if (String(state.etternaVersion).trim() !== JACKDAN_MSD_VERSION) {
+                    try {
+                        const forcedJackDanEtterna = await analyzeEtternaFromText(
+                            rawText,
+                            buildEtternaAnalyzeOptions(JACKDAN_MSD_VERSION),
+                        );
+                        if (isStaleRequest()) return;
+                        jackDanMsdValues = forcedJackDanEtterna?.values;
+                    } catch (error) {
+                        console.warn(`JackDan Etterna (${JACKDAN_MSD_VERSION}) analyze failed: ${error.message}`);
+                    }
+                }
+
+                let companellaMsdValues = ettResult?.values;
+                const companellaEtternaVersion = String(
+                    state.companellaEtternaVersion || state.etternaVersion,
+                ).trim() || state.etternaVersion;
+                if (String(state.etternaVersion).trim() !== companellaEtternaVersion) {
+                    try {
+                        const forcedCompanellaEtterna = await analyzeEtternaFromText(
+                            rawText,
+                            buildEtternaAnalyzeOptions(companellaEtternaVersion),
+                        );
+                        if (isStaleRequest()) return;
+                        companellaMsdValues = forcedCompanellaEtterna?.values;
+                    } catch (error) {
+                        console.warn(`JackDan Companella Etterna (${companellaEtternaVersion}) analyze failed: ${error.message}`);
+                    }
+                }
+
+                let companellaNumeric = null;
+                try {
+                    const jackDanCompanella = await classifyCompanellaDifficulty({
+                        msdValues: companellaMsdValues,
+                        interludeStar,
+                        sunnyStar: Number(rework.star),
+                    });
+                    companellaNumeric = jackDanCompanella.numericDifficulty;
+                } catch (error) {
+                    console.warn(`JackDan Companella estimate failed: ${error.message}`);
+                }
+
+                try {
+                    const jackDanResult = computeJackDanDifficulty({
+                        sunnyStar: Number(rework.star),
+                        companellaNumeric,
+                        msdTechnical: jackDanMsdValues?.Technical,
+                        msdOverall: jackDanMsdValues?.Overall,
+                        interludeStar,
+                    });
+                    resolvedEstDiff = jackDanResult.label;
+                    resolvedNumericDifficulty = jackDanResult.numeric;
+                    resolvedNumericDifficultyHint = null;
+                } catch (error) {
+                    console.warn(`JackDan estimate failed: ${error.message}`);
+                }
+                pendingJackDanEstimate = false;
             }
 
             // 写缓存：companella 完成后、SV/auto-profile 段之前。
