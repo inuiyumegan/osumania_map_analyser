@@ -12,7 +12,7 @@
 			"For Interlude Player",
 			"Pattern Focus",
 			"Full Overview",
-			"Vibro Player",
+			"Vibro Player(WIP)",
 			"Jack Player",
 			"The Limit Does Not Exist(Dear Reflec...)",
 			"Daniel-like",
@@ -113,7 +113,8 @@
 			"MSD",
 			"Pattern",
 			"ReworkSR",
-			"InterludeSR"
+			"InterludeSR",
+			"JackDan"
 		],
 		"value": "Difficulty"
 	},

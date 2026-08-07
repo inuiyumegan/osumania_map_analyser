@@ -4,25 +4,23 @@ import { analyzeEtternaFromText } from "../ett/index.js";
 import { classifyCompanellaDifficulty } from "./companellaEstimator.js";
 
 /**
- * Jack Dan estimator — retrained on 94 jack/chordjack single maps
- * (Joker Practice Packs 1/2, Impossible Jack 1-5, Kether Dan, Stellar Dan 2).
+ * Jack Dan estimator — retrained on 424 maps:
+ *   - 117 exact (CSV1 49 / CSV2 33 / Stellar 12 / 高难 23, fuzzy 14.5)
+ *   - 274 fuzzy ±0.5 (Road to Joker non-boss maps: Chi 50 / Psi 117 / Omega 107, weight 1.0)
+ *   - 33 fuzzy ±1 (Road to Joker boss maps: Psi 12 / Omega 12 / Gemini 9, weight 0.15)
  *
- * Model (forward feature selection + strict leave-one-out on 94 maps):
+ * Model (weighted forward feature selection + strict leave-one-out, all plugin
+ * algorithms as candidates; Interlude/pattern features were out-selected):
  *   ideal = intercept
- *         + 0.1828 * sunny.star
- *         + 0.4385 * companella.numeric
- *         + 0.1746 * msd.Technical(0.72.3)
- *         + 0.1601 * msd.Overall(0.72.3)
- *         + 0.3642 * interlude.sr
- *   LOO-RMSE 0.602 / LOO-MAE 0.466 (vs 0.737 for the previous 2-feature fit).
+ *         + 0.1112 * sunny.star
+ *         + 0.5764 * companella.numeric
+ *         + 0.1324 * msd.Jumpstream(0.72.3)
+ *         + 0.2048 * msd.JackSpeed(0.72.3)
+ *         + 0.1564 * msd.Stream(0.72.3)
+ *         + 0.0379 * msd.Stamina(0.72.3)
+ *   LOO-RMSE 0.530 (weighted), grouped ±1: exact 90%, fuzzy05 Chi 90% / Psi 97% / Omega 99%.
  *
- * Overfit guards: strict LOO for feature selection (cap 5 features), ridge /
- * quadratic / split-bucket / key-type-correction variants all measured worse,
- * weights verified stable between the 49-map and 94-map fits (except sunny,
- * whose coefficient is small and collinear with interlude — prediction stays
- * stable under LOO).
- *
- * MSD features are pinned to 0.72.3 (weights calibrated on that version);
+ * MSD features pinned to 0.72.3 (weights calibrated on that version);
  * Companella input uses its own MSD version (0.74.0 default).
  */
 
@@ -30,12 +28,13 @@ export const JACKDAN_MSD_VERSION = "0.72.3";
 export const JACKDAN_COMPANELLA_MSD_VERSION = "0.74.0";
 
 export const JACKDAN_WEIGHTS = Object.freeze({
-    intercept: -12.5055,
-    sunny: 0.1828,
-    companella: 0.4385,
-    msdTechnical: 0.1746,
-    msdOverall: 0.1601,
-    interlude: 0.3642,
+    intercept: -12.1173,
+    sunny: 0.1112,
+    companella: 0.5764,
+    msdJumpstream: 0.1324,
+    msdJackSpeed: 0.2048,
+    msdStream: 0.1564,
+    msdStamina: 0.0379,
 });
 
 const JACKDAN_DAN_NAMES = Object.freeze([
@@ -45,28 +44,30 @@ const JACKDAN_DAN_NAMES = Object.freeze([
 
 /**
  * Pure scoring function shared by the plugin pipeline and standalone scripts.
- * All six inputs must be finite numbers.
+ * All inputs must be finite numbers.
  * @returns {{ numeric: number, label: string }}
  * @throws if any input is not a finite number.
  */
 export function computeJackDanDifficulty({
     sunnyStar,
     companellaNumeric,
-    msdTechnical,
-    msdOverall,
-    interludeStar,
+    msdJumpstream,
+    msdJackSpeed,
+    msdStream,
+    msdStamina,
 }) {
-    const vals = [sunnyStar, companellaNumeric, msdTechnical, msdOverall, interludeStar].map(Number);
+    const vals = [sunnyStar, companellaNumeric, msdJumpstream, msdJackSpeed, msdStream, msdStamina].map(Number);
     if (vals.some((v) => !Number.isFinite(v))) {
-        throw new Error("JackDan requires valid Sunny, Companella, MSD(0.72.3 Overall/Technical) and Interlude SR");
+        throw new Error("JackDan requires valid Sunny, Companella, MSD(0.72.3 Jumpstream/JackSpeed/Stream/Stamina)");
     }
 
     const raw = JACKDAN_WEIGHTS.intercept
         + JACKDAN_WEIGHTS.sunny * vals[0]
         + JACKDAN_WEIGHTS.companella * vals[1]
-        + JACKDAN_WEIGHTS.msdTechnical * vals[2]
-        + JACKDAN_WEIGHTS.msdOverall * vals[3]
-        + JACKDAN_WEIGHTS.interlude * vals[4];
+        + JACKDAN_WEIGHTS.msdJumpstream * vals[2]
+        + JACKDAN_WEIGHTS.msdJackSpeed * vals[3]
+        + JACKDAN_WEIGHTS.msdStream * vals[4]
+        + JACKDAN_WEIGHTS.msdStamina * vals[5];
     const numeric = Number(raw.toFixed(2));
 
     // 超出标尺范围：> Ender Horus High（14.4）显示上限标签，< I low（0.4）显示下限标签。
@@ -106,8 +107,8 @@ export function computeJackDanDifficulty({
 
 /**
  * Standalone async entry point (Node training scripts / debug panel).
- * The plugin pipeline reuses already-computed Etterna + Interlude results and
- * only calls computeJackDanDifficulty.
+ * The plugin pipeline reuses already-computed Etterna results and only calls
+ * computeJackDanDifficulty.
  */
 export async function runJackDanEstimatorFromText(osuText, options = {}) {
     const speedRate = Number.isFinite(options.speedRate) && options.speedRate > 0 ? options.speedRate : 1.0;
@@ -140,9 +141,10 @@ export async function runJackDanEstimatorFromText(osuText, options = {}) {
     const dan = computeJackDanDifficulty({
         sunnyStar: sunny.star,
         companellaNumeric,
-        msdTechnical: ett723?.values?.Technical,
-        msdOverall: ett723?.values?.Overall,
-        interludeStar,
+        msdJumpstream: ett723?.values?.Jumpstream,
+        msdJackSpeed: ett723?.values?.JackSpeed,
+        msdStream: ett723?.values?.Stream,
+        msdStamina: ett723?.values?.Stamina,
     });
 
     return {
@@ -154,6 +156,5 @@ export async function runJackDanEstimatorFromText(osuText, options = {}) {
         numericDifficultyHint: null,
         graph: sunny.graph ?? null,
         jackDanMsdValues: ett723?.values ?? null,
-        jackDanInterludeStar: Number.isFinite(interludeStar) ? interludeStar : null,
     };
 }

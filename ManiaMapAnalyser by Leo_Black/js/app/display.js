@@ -573,8 +573,30 @@ function showRightCapsuleCategoryValue(categoryText) {
     reworkRightCapsuleEl.style.textShadow = "none";
 }
 
-export function renderRightCapsule(diffMode, reworkStarValue, patternCategoryText, etternaOverallValue, interludeStarValue) {
+// JackDan：与 Sunny（左上角星数）一致，只显示难度文本，去掉胶囊的圆角框。
+function showRightCapsuleJackDanText(text) {
     if (!reworkRightCapsuleEl) {
+        return;
+    }
+    numericAnimationTokens.delete(reworkRightCapsuleEl);
+    reworkRightCapsuleEl.classList.remove("numeric-mode", "category-mode", "high-contrast", "has-unit");
+    reworkRightCapsuleEl.removeAttribute("data-unit");
+    reworkRightCapsuleEl.textContent = sanitizeCategoryText(text);
+    reworkRightCapsuleEl.style.background = "transparent";
+    reworkRightCapsuleEl.style.border = "none";
+    reworkRightCapsuleEl.style.borderRadius = "0";
+    reworkRightCapsuleEl.style.padding = "0";
+    reworkRightCapsuleEl.style.color = "#f6fbff";
+    reworkRightCapsuleEl.style.textShadow = "none";
+}
+
+export function renderRightCapsule(diffMode, reworkStarValue, patternCategoryText, etternaOverallValue, interludeStarValue, jackDanText = null) {
+    if (!reworkRightCapsuleEl) {
+        return;
+    }
+
+    if (diffMode === "JackDan") {
+        showRightCapsuleJackDanText(jackDanText || "-");
         return;
     }
 

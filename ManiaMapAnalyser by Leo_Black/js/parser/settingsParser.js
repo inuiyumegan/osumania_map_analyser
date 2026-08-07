@@ -175,6 +175,7 @@ export function normalizeDiffTextValue(value) {
     if (lowered === "interludesr") return "InterludeSR";
     if (lowered === "graph") return "Graph";
     if (lowered === "difficulty") return "Difficulty";
+    if (lowered === "jackdan") return "JackDan";
     return null;
 }
 

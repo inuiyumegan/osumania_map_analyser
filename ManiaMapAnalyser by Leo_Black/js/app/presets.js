@@ -323,7 +323,7 @@ const PRESET_DEFS = [
     },
     {
         id: "vibro-player",
-        name: "Vibro Player",
+        name: "Vibro Player(WIP)",
         description: "Etterna skillset bars with MSD, graph at top-right.",
         settings: {
             contentBar: "Etterna",
@@ -365,11 +365,11 @@ const PRESET_DEFS = [
     {
         id: "jack-player",
         name: "Jack Player",
-        description: "Difficulty graph, MSD on the left, estimated difficulty at top-right.",
+        description: "Difficulty graph, MSD on the left, JackDan difficulty at top-right.",
         settings: {
             contentBar: "Graph",
             srText: "MSD",
-            diffText: "Difficulty",
+            diffText: "JackDan",
             debugUseAmount: false,
             estimatorAlgorithm: "Mixed",
             azusaSunnyReferenceHo: true,
@@ -786,13 +786,12 @@ function applySnapshot(snapshot) {
 }
 
 function writeBackToTosu(presetName, snapshot) {
-    // Only the browser page (127.0.0.1) writes back. The in-game overlays load
-    // from localhost — a DIFFERENT origin that shares no localStorage with the
-    // browser page — so their write-back dedup records are invisible to the
-    // browser page. If they wrote back, a lagging overlay would misjudge a
-    // preset-apply echo as a manual edit, auto-save to "Last Saved Preset" /
-    // its anchored preset and jump every page's picker. Overlays stay read-only.
-    if (window.location.hostname !== "127.0.0.1") {
+    // Only browser pages (127.0.0.1 or localhost) write back. The in-game
+    // overlays load from localhost too, but the shared localStorage dedup
+    // (lastWritten) still collapses their echo loops, so allowing localhost is
+    // safe — and required, because the README workflow opens the edit page at
+    // http://localhost:24050/... (a different hostname than 127.0.0.1).
+    if (window.location.hostname !== "127.0.0.1" && window.location.hostname !== "localhost") {
         return;
     }
 

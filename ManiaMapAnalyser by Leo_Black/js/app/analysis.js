@@ -296,15 +296,16 @@ export async function fetchBeatmapFile(reason) {
             || state.srText === "MSD"
             || state.diffText === "MSD"
             || state.vibroDetection
-            || (currentEstimatorAlgorithm() === "Companella" || currentEstimatorAlgorithm() === "Mixed" || currentEstimatorAlgorithm() === "JackDan"),
+            || (currentEstimatorAlgorithm() === "Companella" || currentEstimatorAlgorithm() === "Mixed" || currentEstimatorAlgorithm() === "JackDan" || state.diffText === "JackDan"),
         graph: state.diffText === "Graph" || contentBarShows("Graph"),
         interlude: state.srText === "InterludeSR"
             || state.diffText === "InterludeSR"
             || currentEstimatorAlgorithm() === "Companella"
             || currentEstimatorAlgorithm() === "Mixed"
-            || currentEstimatorAlgorithm() === "JackDan",
+            || currentEstimatorAlgorithm() === "JackDan"
+            || state.diffText === "JackDan",
     };
-    const cacheKey = `${state.estimatorAlgorithm}|${state.lastBeatmapIdentity}|${state.modSignature}`;
+    const cacheKey = `${state.estimatorAlgorithm}|${state.diffText}|${state.lastBeatmapIdentity}|${state.modSignature}`;
     const isMetaDegraded = String(state.lastBeatmapIdentity || "").startsWith("meta:");
     let cached = null;
     if (state.enableResultCache && state.lastBeatmapIdentity) {
@@ -408,7 +409,8 @@ export async function fetchBeatmapFile(reason) {
         const estimatorAlgorithm = currentEstimatorAlgorithm();
         const estimatorNeedsCompanellaData = estimatorAlgorithm === "Companella"
             || estimatorAlgorithm === "Mixed"
-            || estimatorAlgorithm === "JackDan";
+            || estimatorAlgorithm === "JackDan"
+            || state.diffText === "JackDan";
 
         const needVibroDetection = state.vibroDetection;
         const needPatternAnalysis = showsPattern
@@ -527,6 +529,10 @@ export async function fetchBeatmapFile(reason) {
                 rework = selectedRework;
                 state.actualEstimatorAlgorithm = actualEstimatorAlgorithm;
                 if (isStaleRequest()) return;
+                // 右上角显示 JackDan 但主体算法不是 JackDan 时，额外触发 JackDan 后处理。
+                if (state.diffText === "JackDan" && estimatorAlgorithm !== "JackDan") {
+                    pendingJackDanEstimate = Number(selectedRework.columnCount) === 4;
+                }
                 resolvedEstDiff = nextEstDiff;
                 resolvedNumericDifficulty = nextNumericDifficulty;
                 resolvedNumericDifficultyHint = nextNumericDifficultyHint;
@@ -803,9 +809,10 @@ export async function fetchBeatmapFile(reason) {
                     const jackDanResult = computeJackDanDifficulty({
                         sunnyStar: Number(rework.star),
                         companellaNumeric,
-                        msdTechnical: jackDanMsdValues?.Technical,
-                        msdOverall: jackDanMsdValues?.Overall,
-                        interludeStar,
+                        msdJumpstream: jackDanMsdValues?.Jumpstream,
+                        msdJackSpeed: jackDanMsdValues?.JackSpeed,
+                        msdStream: jackDanMsdValues?.Stream,
+                        msdStamina: jackDanMsdValues?.Stamina,
                     });
                     resolvedEstDiff = jackDanResult.label;
                     resolvedNumericDifficulty = jackDanResult.numeric;
@@ -968,6 +975,7 @@ export async function fetchBeatmapFile(reason) {
             patternReport?.Category || "-",
             Number(ettResult?.values?.Overall),
             Number(interludeStar),
+            state.diffText === "JackDan" ? resolvedEstDiff : null,
         );
 
         const overallValue = Number(ettResult?.values?.Overall);

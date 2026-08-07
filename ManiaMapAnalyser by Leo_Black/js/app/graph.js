@@ -659,7 +659,8 @@ export function updateDiffTextVisibility() {
     const showRightCapsule = mode === "MSD"
         || mode === "Pattern"
         || mode === "ReworkSR"
-        || mode === "InterludeSR";
+        || mode === "InterludeSR"
+        || mode === "JackDan";
 
     reworkDiffEl.hidden = !showDiffText;
     forEachGraphView((view) => {
@@ -693,6 +694,9 @@ export function updateDiffTextVisibility() {
                 break;
             case "InterludeSR":
                 estDiffCaptionEl.textContent = "Interlude Star Rating";
+                break;
+            case "JackDan":
+                estDiffCaptionEl.textContent = "Jack Dan Difficulty";
                 break;
             default:
                 estDiffCaptionEl.textContent = "";
