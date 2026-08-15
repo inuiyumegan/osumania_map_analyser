@@ -8,7 +8,7 @@ import {
     runMixedEstimatorFromText,
 } from "../estimator/mixedEstimator.js";
 import { classifyCompanellaDifficulty } from "../estimator/companellaEstimator.js";
-import { computeJackDanDifficulty, JACKDAN_MSD_VERSION } from "../estimator/jackdanEstimator.js";
+import { computeJackDanDifficulty, isJackMap, extractJackDanPatternFeatures, JACKDAN_MSD_VERSION, loadJackDanTreeModel, computeJackDanTreeDifficulty, isJackDanTreeModelLoaded } from "../estimator/jackdanEstimator.js";
 import { calculateInterludeStar } from "../interlude/index.js";
 import { analyzePatternFromText } from "../patterns/service.js";
 import { OsuFileParser } from "../parser/osuFileParser.js";
@@ -291,7 +291,9 @@ export async function fetchBeatmapFile(reason) {
             || state.diffText === "Pattern"
             || state.useSvDetection
             || state.vibroDetection
-            || isAutoDisplayEnabledNow(),
+            || isAutoDisplayEnabledNow()
+            || currentEstimatorAlgorithm() === "JackDan"
+            || state.diffText === "JackDan",
         ett: contentBarShows("Etterna")
             || state.srText === "MSD"
             || state.diffText === "MSD"
@@ -418,7 +420,9 @@ export async function fetchBeatmapFile(reason) {
             || state.diffText === "Pattern"
             || state.useSvDetection
             || needVibroDetection
-            || autoDisplayEnabled;
+            || autoDisplayEnabled
+            || estimatorAlgorithm === "JackDan"
+            || state.diffText === "JackDan";
         const needMsdValue = state.srText === "MSD" || state.diffText === "MSD";
         const needInterludeValue = state.srText === "InterludeSR"
             || state.diffText === "InterludeSR"
@@ -759,8 +763,9 @@ export async function fetchBeatmapFile(reason) {
             }
 
             // JackDan：复用管线已算好的 Etterna MSD + Interlude SR，
-            // 模型特征固定用 0.72.3 MSD（Overall/Technical），Companella 输入
-            // 用其自身版本（默认 0.74.0）；与全局 Etterna 版本不同时单独重算。
+            // 模型特征固定用 0.72.3 MSD（Jumpstream/JackSpeed/Stream/Stamina），
+            // Companella 输入用其自身版本（默认 0.74.0）；与全局 Etterna 版本
+            // 不同时单独重算。双筛选判定非叠键谱面时 fallback 到 Mixed。
             if (pendingJackDanEstimate && !cached) {
                 let jackDanMsdValues = ettResult?.values;
                 if (String(state.etternaVersion).trim() !== JACKDAN_MSD_VERSION) {
@@ -793,32 +798,105 @@ export async function fetchBeatmapFile(reason) {
                     }
                 }
 
-                let companellaNumeric = null;
-                try {
-                    const jackDanCompanella = await classifyCompanellaDifficulty({
-                        msdValues: companellaMsdValues,
-                        interludeStar,
-                        sunnyStar: Number(rework.star),
-                    });
-                    companellaNumeric = jackDanCompanella.numericDifficulty;
-                } catch (error) {
-                    console.warn(`JackDan Companella estimate failed: ${error.message}`);
+                // 0.68 MSD（JackSpeed 特征——未饱和版本，对高难段有区分度）
+                let jackDan068Values = null;
+                if (String(state.etternaVersion).trim() !== "0.68.0-Unofficial") {
+                    try {
+                        const forced068 = await analyzeEtternaFromText(
+                            rawText,
+                            buildEtternaAnalyzeOptions("0.68.0-Unofficial"),
+                        );
+                        if (isStaleRequest()) return;
+                        jackDan068Values = forced068?.values;
+                    } catch (error) {
+                        console.warn(`JackDan Etterna (0.68.0-Unofficial) analyze failed: ${error.message}`);
+                    }
+                } else {
+                    jackDan068Values = ettResult?.values;
                 }
 
-                try {
-                    const jackDanResult = computeJackDanDifficulty({
-                        sunnyStar: Number(rework.star),
-                        companellaNumeric,
-                        msdJumpstream: jackDanMsdValues?.Jumpstream,
-                        msdJackSpeed: jackDanMsdValues?.JackSpeed,
-                        msdStream: jackDanMsdValues?.Stream,
-                        msdStamina: jackDanMsdValues?.Stamina,
-                    });
-                    resolvedEstDiff = jackDanResult.label;
-                    resolvedNumericDifficulty = jackDanResult.numeric;
-                    resolvedNumericDifficultyHint = null;
-                } catch (error) {
-                    console.warn(`JackDan estimate failed: ${error.message}`);
+                // 双筛选判定：非叠键谱面 fallback 到 Mixed（同一数值体系，Reform 标尺）。
+                if (!isJackMap(jackDanMsdValues, patternReport?.Category ?? null)) {
+                    try {
+                        const mixedResult = runMixedEstimatorFromText(rawText, estimatorOptions);
+                        if (mixedResult?.mixedCompanellaPlan) {
+                            const jackDanCompanella = await classifyCompanellaDifficulty({
+                                msdValues: companellaMsdValues,
+                                interludeStar,
+                                sunnyStar: Number(mixedResult.star),
+                            });
+                            const mixedAfterCompanella = applyCompanellaToMixedResult({
+                                estDiff: mixedResult.estDiff,
+                                numericDifficulty: mixedResult.numericDifficulty,
+                                numericDifficultyHint: mixedResult.numericDifficultyHint,
+                                mixedCompanellaPlan: mixedResult.mixedCompanellaPlan,
+                            }, jackDanCompanella);
+                            mixedResult.estDiff = mixedAfterCompanella.estDiff;
+                            mixedResult.numericDifficulty = mixedAfterCompanella.numericDifficulty;
+                            mixedResult.numericDifficultyHint = mixedAfterCompanella.numericDifficultyHint;
+                        }
+                        rework = mixedResult;
+                        resolvedEstDiff = mixedResult.estDiff;
+                        resolvedNumericDifficulty = mixedResult.numericDifficulty;
+                        resolvedNumericDifficultyHint = mixedResult.numericDifficultyHint;
+                        state.actualEstimatorAlgorithm = "Mixed";
+                    } catch (error) {
+                        console.warn(`JackDan fallback to Mixed failed: ${error.message}`);
+                    }
+                } else {
+                    let companellaNumeric = null;
+                    try {
+                        const jackDanCompanella = await classifyCompanellaDifficulty({
+                            msdValues: companellaMsdValues,
+                            interludeStar,
+                            sunnyStar: Number(rework.star),
+                        });
+                        companellaNumeric = jackDanCompanella.numericDifficulty;
+                    } catch (error) {
+                        console.warn(`JackDan Companella estimate failed: ${error.message}`);
+                    }
+
+                    try {
+                        let jackDanResult;
+                        if (isJackDanTreeModelLoaded()) {
+                            jackDanResult = computeJackDanTreeDifficulty({
+                                sunnyStar: Number(rework.star),
+                                companellaNumeric,
+                                msdStream: jackDanMsdValues?.Stream,
+                                msdJumpstream: jackDanMsdValues?.Jumpstream,
+                                msdHandstream: jackDanMsdValues?.Handstream,
+                                msdStamina: jackDanMsdValues?.Stamina,
+                                msdJackSpeed: jackDanMsdValues?.JackSpeed,
+                                msdChordjack: jackDanMsdValues?.Chordjack,
+                                msdTechnical: jackDanMsdValues?.Technical,
+                                msd0_68JackSpeed: jackDan068Values?.JackSpeed,
+                                msd0_74Chordjack: companellaMsdValues?.Chordjack,
+                                interludeStar,
+                                ...extractJackDanPatternFeatures(mergedClusters),
+                            });
+                        } else {
+                            jackDanResult = computeJackDanDifficulty({
+                                sunnyStar: Number(rework.star),
+                                companellaNumeric,
+                                msdStream: jackDanMsdValues?.Stream,
+                                msdJumpstream: jackDanMsdValues?.Jumpstream,
+                                msdHandstream: jackDanMsdValues?.Handstream,
+                                msdStamina: jackDanMsdValues?.Stamina,
+                                msdJackSpeed: jackDanMsdValues?.JackSpeed,
+                                msdChordjack: jackDanMsdValues?.Chordjack,
+                                msdTechnical: jackDanMsdValues?.Technical,
+                                msd0_68JackSpeed: jackDan068Values?.JackSpeed,
+                                msd0_74Chordjack: companellaMsdValues?.Chordjack,
+                                interludeStar,
+                                ...extractJackDanPatternFeatures(mergedClusters),
+                            });
+                        }
+                        resolvedEstDiff = jackDanResult.label;
+                        resolvedNumericDifficulty = jackDanResult.numeric;
+                        resolvedNumericDifficultyHint = null;
+                    } catch (error) {
+                        console.warn(`JackDan estimate failed: ${error.message}`);
+                    }
                 }
                 pendingJackDanEstimate = false;
             }
